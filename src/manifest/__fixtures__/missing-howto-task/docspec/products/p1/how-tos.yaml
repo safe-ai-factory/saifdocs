@@ -1,0 +1,4 @@
+- id: broken-how-to
+  persona: u1
+  task: missing-task-id
+  goal: References a task file that does not exist

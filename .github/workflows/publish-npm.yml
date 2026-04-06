@@ -1,0 +1,45 @@
+# Requires repository secret NPM_TOKEN (npm automation token with publish access for @safe-ai-factory).
+
+name: Publish npm
+
+on:
+  push:
+    tags:
+      # Trigger on tags like v0.1.0
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VER="${GITHUB_REF_NAME#v}"
+          PKG_VER=$(node -p "require('./package.json').version")
+          if [ "$TAG_VER" != "$PKG_VER" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VER"
+            exit 1
+          fi
+
+      - name: Check
+        run: pnpm run check
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

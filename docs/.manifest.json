@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "createdAt": "2026-04-05T18:00:00.000Z",
+  "docspecDir": "vendor/saifdocs/docspec",
+  "outputDir": "vendor/saifdocs/docs",
+  "projectDir": ".",
+  "entries": [
+    {
+      "id": "reference--commands--gen",
+      "type": "references",
+      "output": "vendor/saifdocs/docs/references/commands/gen.md",
+      "read": ["vendor/saifdocs/docs/references/commands/gen.md"],
+      "productId": null,
+      "personaId": null,
+      "taskId": null,
+      "conceptId": null,
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "reference--commands--audit",
+      "type": "references",
+      "output": "vendor/saifdocs/docs/references/commands/audit.md",
+      "read": ["vendor/saifdocs/docs/references/commands/audit.md"],
+      "productId": null,
+      "personaId": null,
+      "taskId": null,
+      "conceptId": null,
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "reference--commands--validate",
+      "type": "references",
+      "output": "vendor/saifdocs/docs/references/commands/validate.md",
+      "read": ["vendor/saifdocs/docs/references/commands/validate.md"],
+      "productId": null,
+      "personaId": null,
+      "taskId": null,
+      "conceptId": null,
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "concept--saifdocs--docspec",
+      "type": "concepts",
+      "output": "vendor/saifdocs/docs/products/saifdocs/concepts/docspec.md",
+      "read": ["vendor/saifdocs/docs/products/saifdocs/concepts/docspec.md"],
+      "productId": "saifdocs",
+      "personaId": null,
+      "taskId": null,
+      "conceptId": "docspec",
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "concept--saifdocs--generation-pipeline",
+      "type": "concepts",
+      "output": "vendor/saifdocs/docs/products/saifdocs/concepts/generation-pipeline.md",
+      "read": ["vendor/saifdocs/docs/products/saifdocs/concepts/generation-pipeline.md"],
+      "productId": "saifdocs",
+      "personaId": null,
+      "taskId": null,
+      "conceptId": "generation-pipeline",
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "how-to--saifdocs--maintainer--add-a-product",
+      "type": "how-tos",
+      "output": "vendor/saifdocs/docs/products/saifdocs/how-tos/add-a-product.md",
+      "read": [
+        "vendor/saifdocs/docs/products/saifdocs/how-tos/add-a-product.md",
+        "vendor/saifdocs/docs/products/saifdocs/concepts/docspec.md",
+        "vendor/saifdocs/docs/products/saifdocs/concepts/generation-pipeline.md"
+      ],
+      "productId": "saifdocs",
+      "personaId": "maintainer",
+      "taskId": "add-a-product",
+      "conceptId": null,
+      "tutorialStage": null,
+      "generatedAt": null
+    },
+    {
+      "id": "tutorial--saifdocs--generate-first-docs",
+      "type": "tutorials",
+      "output": "vendor/saifdocs/docs/products/saifdocs/tutorials/generate-first-docs.md",
+      "read": [
+        "vendor/saifdocs/docs/products/saifdocs/tutorials/generate-first-docs.md",
+        "vendor/saifdocs/docs/products/saifdocs/how-tos/add-a-product.md",
+        "vendor/saifdocs/docs/products/saifdocs/concepts/docspec.md",
+        "vendor/saifdocs/docs/products/saifdocs/concepts/generation-pipeline.md"
+      ],
+      "productId": "saifdocs",
+      "personaId": "maintainer",
+      "taskId": null,
+      "conceptId": null,
+      "tutorialStage": 1,
+      "generatedAt": null
+    },
+    {
+      "id": "landing--saifdocs",
+      "type": "landing-pages",
+      "output": "vendor/saifdocs/docs/products/saifdocs/index.md",
+      "read": ["vendor/saifdocs/docs/products/saifdocs/index.md"],
+      "productId": "saifdocs",
+      "personaId": null,
+      "taskId": null,
+      "conceptId": null,
+      "tutorialStage": null,
+      "generatedAt": null
+    }
+  ]
+}

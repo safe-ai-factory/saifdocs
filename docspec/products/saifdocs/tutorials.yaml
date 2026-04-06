@@ -1,0 +1,38 @@
+- id: overview
+  order: 1
+  prereq_id: null
+  persona: docs-author
+  prereq_concepts: []
+  learns_concepts: []
+  goal: Show what saifdocs does end-to-end — the problem it solves, the two artifacts it works with (docspec tree and generated docs), and the four commands a docs author will use day-to-day — so the reader can decide if it fits their project before touching the CLI
+
+- id: installation
+  order: 2
+  prereq_id: overview
+  persona: docs-author
+  prereq_concepts: []
+  learns_concepts: []
+  goal: Install saifdocs, verify the CLI works, and confirm saifctl is available so the reader is ready to generate their first docs
+
+- id: docspec-to-docs
+  order: 3
+  prereq_id: installation
+  persona: docs-author
+  prereq_concepts: []
+  learns_concepts:
+    - docspec-tree
+    - manifest-build-plan
+    - generation-pipeline
+  goal: Walk through creating a docspec tree from scratch, running saifdocs gen, and verifying the output
+
+- id: ci-docs-pipeline
+  order: 4
+  prereq_id: docspec-to-docs
+  persona: docs-author
+  prereq_concepts:
+    - docspec-tree
+    - manifest-build-plan
+    - generation-pipeline
+  learns_concepts:
+    - staleness-tracking
+  goal: Add saifdocs validate to CI and use saifdocs update for incremental regeneration in a real project

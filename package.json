@@ -1,0 +1,92 @@
+{
+  "name": "@safe-ai-factory/saifdocs",
+  "version": "0.0.1",
+  "description": "AI-driven documentation generator with persona-aware quality control.",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/safe-ai-factory/saifdocs#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/safe-ai-factory/saifdocs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/safe-ai-factory/saifdocs/issues"
+  },
+  "author": "Juro Oravec (https://github.com/JuroOravec)",
+  "funding": {
+    "url": "https://github.com/sponsors/JuroOravec"
+  },
+  "keywords": [
+    "documentation",
+    "docspec",
+    "markdown",
+    "ai-agents",
+    "saifctl",
+    "sandbox",
+    "safe-ai",
+    "cli",
+    "typescript"
+  ],
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "saifdocs": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "review.cedar",
+    "review-strict.cedar"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run knip && pnpm run build && pnpm run test",
+    "knip": "knip --exclude types",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run src/",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@safe-ai-factory/saifctl": "link:../..",
+    "citty": "^0.2.1",
+    "consola": "^3.4.2",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.0",
+    "zod": "^3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25",
+    "@vitest/coverage-v8": "^2.1.9",
+    "eslint": "^9",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "knip": "^5.85.0",
+    "prettier": "^3",
+    "tsup": "^8",
+    "typescript": "^5",
+    "typescript-eslint": "^8",
+    "vitest": "^2.1.9"
+  }
+}
