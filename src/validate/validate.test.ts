@@ -47,7 +47,7 @@ describe('validateManifest', () => {
     };
   }
 
-  it('counts generatedAt null as skipped', async () => {
+  it('counts generatedAt null as stale (never generated)', async () => {
     await setupInputFile();
     const r = await validateManifest(
       makeManifest({
@@ -56,9 +56,11 @@ describe('validateManifest', () => {
         generatedAt: null,
       }),
     );
-    expect(r.skipped).toBe(1);
+    expect(r.stale).toHaveLength(1);
+    expect(r.stale[0]!.id).toBe('e1');
+    expect(r.stale[0]!.staleInputs).toContain('(never generated)');
+    expect(r.skipped).toBe(0);
     expect(r.upToDate).toBe(0);
-    expect(r.stale).toHaveLength(0);
   });
 
   it('marks stale when read file mtime is after generatedAt', async () => {
@@ -85,11 +87,14 @@ describe('validateManifest', () => {
     await setupInputFile();
     const old = new Date('2020-01-01T00:00:00.000Z');
     await utimes(inputPath, old, old);
+    const outPath = join(docspecDir, 'out.md');
+    await writeFile(outPath, 'generated', 'utf8');
 
     const r = await validateManifest(
       makeManifest({
         id: 'e1',
         type: 'references',
+        output: outPath,
         generatedAt: '2025-01-01T00:00:00.000Z',
       }),
     );
@@ -101,11 +106,14 @@ describe('validateManifest', () => {
     await setupInputFile();
     const same = new Date('2025-03-10T15:30:00.000Z');
     await utimes(inputPath, same, same);
+    const outPath = join(docspecDir, 'out.md');
+    await writeFile(outPath, 'generated', 'utf8');
 
     const r = await validateManifest(
       makeManifest({
         id: 'e1',
         type: 'references',
+        output: outPath,
         generatedAt: same.toISOString(),
       }),
     );
@@ -114,17 +122,40 @@ describe('validateManifest', () => {
   });
 
   it('ignores missing read paths (does not mark stale)', async () => {
+    await mkdir(docspecDir, { recursive: true });
     const missing = join(docspecDir, 'nope.md');
+    const outPath = join(docspecDir, 'out.md');
+    await writeFile(outPath, 'generated', 'utf8');
     const r = await validateManifest(
       makeManifest({
         id: 'e1',
         type: 'references',
         read: [missing],
+        output: outPath,
         generatedAt: '2025-01-01T00:00:00.000Z',
       }),
     );
     expect(r.stale).toHaveLength(0);
     expect(r.upToDate).toBe(1);
+  });
+
+  it('marks stale when output file is missing even if inputs are up-to-date', async () => {
+    await setupInputFile();
+    const old = new Date('2020-01-01T00:00:00.000Z');
+    await utimes(inputPath, old, old);
+
+    const r = await validateManifest(
+      makeManifest({
+        id: 'e1',
+        type: 'references',
+        output: join(docspecDir, 'nonexistent-output.md'),
+        generatedAt: '2025-01-01T00:00:00.000Z',
+      }),
+    );
+    expect(r.stale).toHaveLength(1);
+    expect(r.stale[0]!.id).toBe('e1');
+    expect(r.stale[0]!.staleInputs).toContain('(output file missing)');
+    expect(r.upToDate).toBe(0);
   });
 
   it('filters by types', async () => {
@@ -171,10 +202,12 @@ describe('validateManifest', () => {
     const refsOnly = await validateManifest(manifest, { types: ['references'] });
     expect(refsOnly.stale).toHaveLength(1);
     expect(refsOnly.stale[0]!.id).toBe('ref1');
+    expect(refsOnly.skipped).toBe(1);
 
     const conceptsOnly = await validateManifest(manifest, { types: ['concepts'] });
     expect(conceptsOnly.stale).toHaveLength(1);
     expect(conceptsOnly.stale[0]!.id).toBe('c1');
+    expect(conceptsOnly.skipped).toBe(1);
   });
 
   it('marks stale when generatedAt is invalid', async () => {

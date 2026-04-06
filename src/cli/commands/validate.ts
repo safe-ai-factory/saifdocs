@@ -18,7 +18,7 @@ const validateCommand = defineCommand({
   meta: {
     name: 'validate',
     description:
-      'Check generated docs against docspec/.manifest.json: stale if any read input is newer than generatedAt',
+      'Check generated docs against docspec/.manifest.json: stale if inputs changed, output missing, or never generated',
   },
   args: {
     'docspec-dir': docspecDirArg,
@@ -68,7 +68,7 @@ const validateCommand = defineCommand({
     } else {
       const totalChecked = result.stale.length + result.upToDate + result.skipped;
       consola.info(
-        `[validate] ${result.stale.length} stale, ${result.upToDate} up-to-date, ${result.skipped} never generated (of ${totalChecked} entries in scope)`,
+        `[validate] ${result.stale.length} stale, ${result.upToDate} up-to-date, ${result.skipped} out of scope (of ${totalChecked} entries checked)`,
       );
       for (const s of result.stale) {
         consola.warn(`  STALE  ${s.id}`);

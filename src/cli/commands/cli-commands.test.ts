@@ -165,7 +165,7 @@ describe('CLI validate', () => {
     }
   });
 
-  it('exits 0 when manifest valid and entries skipped', async () => {
+  it('exits 0 when manifest valid and entries out of scope for --types', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'saifdocs-val3-'));
     try {
       const manifest: ManifestDocument = {
@@ -186,11 +186,25 @@ describe('CLI validate', () => {
             conceptId: null,
             tutorialPosition: null,
             tutorialThreadLength: null,
+            generatedAt: '2025-01-01T00:00:00.000Z',
+          },
+          {
+            id: 'e2',
+            type: 'concepts',
+            output: join(dir, 'o2.md'),
+            read: [],
+            productId: null,
+            personaId: null,
+            taskIds: [],
+            conceptId: null,
+            tutorialPosition: null,
+            tutorialThreadLength: null,
             generatedAt: null,
           },
         ],
       };
       await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, 'o.md'), 'ok', 'utf8');
       await writeFile(
         join(dir, '.manifest.json'),
         `${JSON.stringify(manifest, null, 2)}\n`,
@@ -200,7 +214,9 @@ describe('CLI validate', () => {
       const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
       await expect(
-        validateCommand.run!(ctxArgv(validateCommand, ['--docspec-dir', dir, '--json'])),
+        validateCommand.run!(
+          ctxArgv(validateCommand, ['--docspec-dir', dir, '--json', '--types', 'references']),
+        ),
       ).rejects.toMatchObject({ exitCode: 0 });
 
       expect(exitCtx.exitCodes).toEqual([0]);

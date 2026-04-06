@@ -32,7 +32,7 @@ const updateCommand = defineCommand({
   meta: {
     name: 'update',
     description:
-      'Regenerate only manifest entries whose read inputs are newer than generatedAt (see validate)',
+      'Regenerate manifest entries that are stale per validate (newer inputs, missing output, or never generated)',
   },
   args: {
     'docspec-dir': docspecDirArg,

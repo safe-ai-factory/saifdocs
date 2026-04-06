@@ -92,7 +92,7 @@ export async function runUpdateCore(
     return { code: 2, kind: 'missing-manifest-error' };
   }
 
-  // File-level staleness: any `read` path mtime > entry.generatedAt (see validateManifest).
+  // Staleness: never generated, missing output, or any `read` path mtime > generatedAt (see validateManifest).
   const validation = await validateManifest(manifest, { types: input.types });
   const staleIds = new Set(validation.stale.map((s) => s.id));
 

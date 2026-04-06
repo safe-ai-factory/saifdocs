@@ -7,14 +7,14 @@ export type StaleEntry = {
   output: string;
   /** ISO timestamp of the most recently modified stale input path. */
   staleSince: string;
-  /** Paths under `read` that are newer than `generatedAt`. */
+  /** Paths under `read` newer than `generatedAt`, or synthetic reasons e.g. `(never generated)`. */
   staleInputs: string[];
 };
 
 export type ValidateResult = {
   stale: StaleEntry[];
   upToDate: number;
-  /** Entries with `generatedAt === null` (never generated). */
+  /** Entries excluded by `types` filter (not checked for staleness). */
   skipped: number;
 };
 
@@ -43,7 +43,7 @@ async function statMtimeMs(path: string): Promise<number | null> {
 /**
  * Compare each entry's `read` paths to `generatedAt`. If any existing file's mtime is strictly
  * after `generatedAt`, the entry is stale. Missing `read` files are ignored (do not cause staleness).
- * Entries with `generatedAt === null` are counted as `skipped`, not stale.
+ * Entries with `generatedAt === null` or a missing output file are stale (need (re)generation).
  */
 export async function validateManifest(
   manifest: ManifestDocument,
@@ -55,10 +55,18 @@ export async function validateManifest(
   let skipped = 0;
 
   for (const entry of manifest.entries) {
-    if (!settingsIncludeType(types, entry.type)) continue;
+    if (!settingsIncludeType(types, entry.type)) {
+      skipped++;
+      continue;
+    }
 
     if (entry.generatedAt === null) {
-      skipped++;
+      stale.push({
+        id: entry.id,
+        output: entry.output,
+        staleSince: new Date(0).toISOString(),
+        staleInputs: ['(never generated)'],
+      });
       continue;
     }
 
@@ -94,7 +102,17 @@ export async function validateManifest(
         staleInputs,
       });
     } else {
-      upToDate++;
+      const outputMtime = await statMtimeMs(entry.output);
+      if (outputMtime === null) {
+        stale.push({
+          id: entry.id,
+          output: entry.output,
+          staleSince: entry.generatedAt,
+          staleInputs: ['(output file missing)'],
+        });
+      } else {
+        upToDate++;
+      }
     }
   }
 

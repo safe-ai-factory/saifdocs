@@ -98,6 +98,8 @@ describe('runUpdateCore', () => {
     await writeFile(inputPath, 'x', 'utf8');
     const old = new Date('2020-01-01T00:00:00.000Z');
     await utimes(inputPath, old, old);
+    const outputPath = join(base, 'out.md');
+    await writeFile(outputPath, 'generated', 'utf8');
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
@@ -137,6 +139,47 @@ describe('runUpdateCore', () => {
     );
     expect(r).toEqual({ code: 0, kind: 'nothing-to-update' });
     expect(gen).not.toHaveBeenCalled();
+  });
+
+  it('calls generateEntries when entry has generatedAt null', async () => {
+    const dir = join(base, 'null-generated-at');
+    await mkdir(dir, { recursive: true });
+
+    const manifest: ManifestDocument = {
+      version: MANIFEST_VERSION,
+      createdAt: '2020-01-01T00:00:00.000Z',
+      docspecDir: dir,
+      outputDir: join(dir, 'docs'),
+      projectDir: dir,
+      entries: [entry({ id: 'ref1', type: 'references', generatedAt: null })],
+    };
+    await writeManifest(dir, manifest);
+
+    const gen = vi.fn().mockResolvedValue({
+      summary: { attempted: 1, succeeded: 1, failed: 0, skipped: 0, failures: [] },
+      manifest,
+    });
+
+    const r = await runUpdateCore(
+      {
+        docspecDir: dir,
+        outputDir: manifest.outputDir,
+        projectDir: manifest.projectDir,
+        types: 'all',
+        dryRun: false,
+        allowMissingManifest: false,
+        gateRetries: 2,
+      },
+      {
+        readManifestFromDocspec: async () => manifest,
+        generateEntries: gen as unknown as typeof generateEntries,
+      },
+    );
+
+    expect(r.kind).toBe('success');
+    expect(gen).toHaveBeenCalledTimes(1);
+    const only = gen.mock.calls[0]![2]?.onlyEntryIds;
+    expect(only?.has('ref1')).toBe(true);
   });
 
   it('returns dry-run with stale list and does not call generateEntries', async () => {
