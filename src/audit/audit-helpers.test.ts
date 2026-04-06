@@ -11,9 +11,10 @@ function productWithConcepts(concepts: ProductEntry['concepts']): ProductEntry {
     productRules: null,
     personas: [],
     concepts,
-    howTosManifestPath: null,
+    howTosDirPath: null,
     howTosManifest: null,
-    tutorialsManifestPath: null,
+    tutorialsDirPath: null,
+    tutorialsOrderPath: null,
     tutorialsManifest: null,
   };
 }

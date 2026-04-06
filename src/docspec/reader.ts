@@ -12,16 +12,19 @@ import yaml from 'js-yaml';
 import { DocspecError } from './errors.js';
 import {
   ConceptFrontmatterSchema,
-  HowToIntentSchema,
+  HowToFileFrontmatterSchema,
   PageTemplateFrontmatterSchema,
   ReferencePointerFrontmatterSchema,
+  SlugSchema,
   TaskFrontmatterSchema,
-  TutorialIntentSchema,
+  TutorialFileFrontmatterSchema,
+  TutorialIndexEntrySchema,
 } from './schema.js';
 import type {
   BlockTemplate,
   ConceptFile,
   GlobalRules,
+  HowToIntent,
   PageTemplate,
   ParsedDocspec,
   PersonaEntry,
@@ -32,6 +35,7 @@ import type {
   ProductRules,
   ReferencePointer,
   TaskFile,
+  TutorialIntent,
 } from './types.js';
 
 // --- helpers ---
@@ -64,27 +68,7 @@ async function readMarkdownFile(
   return { data: parsed.data as Record<string, unknown>, body: parsed.content };
 }
 
-/** Resolve `how-tos` / `tutorials` manifest: `*.yaml` or `*.yml` (not both). */
-export async function resolveProductYamlManifestPath(
-  productDir: string,
-  stem: 'how-tos' | 'tutorials',
-): Promise<string | null> {
-  const yamlPath = join(productDir, `${stem}.yaml`);
-  const ymlPath = join(productDir, `${stem}.yml`);
-  const hasYaml = await exists(yamlPath);
-  const hasYml = await exists(ymlPath);
-  if (hasYaml && hasYml) {
-    throw new DocspecError(
-      `Only one of ${stem}.yaml or ${stem}.yml may exist (both found)`,
-      yamlPath,
-    );
-  }
-  if (hasYaml) return yamlPath;
-  if (hasYml) return ymlPath;
-  return null;
-}
-
-/** `how-tos.{yaml,yml}` / `tutorials.{yaml,yml}`: whole file is a YAML array of intent objects. */
+/** Whole file is a YAML array of objects. */
 function parseYamlListFile<T>(
   path: string,
   raw: string,
@@ -104,15 +88,198 @@ function parseYamlListFile<T>(
   });
 }
 
-/** Missing file → `null`; empty file → `[]`. */
-async function readOptionalYamlManifest<T>(
-  path: string,
-  itemSchema: { parse: (v: unknown) => T },
-): Promise<T[] | null> {
-  if (!(await exists(path))) return null;
-  const raw = (await readFile(path, 'utf8')).trim();
-  if (!raw) return [];
-  return parseYamlListFile(path, raw, itemSchema);
+function slugifyStem(stem: string): string {
+  return stem
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function resolveDocspecSlugId(
+  explicit: string | undefined,
+  fileStem: string,
+  filePath: string,
+): string {
+  const candidate = explicit ?? slugifyStem(fileStem);
+  if (!candidate) {
+    throw new DocspecError(
+      'Could not derive id from filename; add a lowercase kebab-case `id` in frontmatter',
+      filePath,
+    );
+  }
+  const r = SlugSchema.safeParse(candidate);
+  if (!r.success) {
+    const msg = r.error.issues[0]?.message ?? 'invalid slug';
+    throw new DocspecError(`Invalid id "${candidate}": ${msg}`, filePath);
+  }
+  return candidate;
+}
+
+async function resolveTutorialsIndexPath(tutorialsDir: string): Promise<string | null> {
+  const yamlPath = join(tutorialsDir, 'index.yaml');
+  const ymlPath = join(tutorialsDir, 'index.yml');
+  const hasYaml = await exists(yamlPath);
+  const hasYml = await exists(ymlPath);
+  if (hasYaml && hasYml) {
+    throw new DocspecError(
+      'Only one of tutorials/index.yaml or tutorials/index.yml may exist (both found)',
+      yamlPath,
+    );
+  }
+  if (hasYaml) return yamlPath;
+  if (hasYml) return ymlPath;
+  return null;
+}
+
+export async function readHowTosDir(howTosDir: string): Promise<HowToIntent[]> {
+  const byId = new Map<string, HowToIntent>();
+  for (const name of await readdir(howTosDir)) {
+    if (!name.endsWith('.md')) continue;
+    const absolutePath = join(howTosDir, name);
+    if (!(await stat(absolutePath)).isFile()) continue;
+    const stem = basename(name, '.md');
+    const { data, body } = await readMarkdownFile(absolutePath);
+    let frontmatter;
+    try {
+      frontmatter = HowToFileFrontmatterSchema.parse(data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new DocspecError(`Invalid how-to frontmatter: ${msg}`, absolutePath);
+    }
+    const id = resolveDocspecSlugId(frontmatter.id, stem, absolutePath);
+    if (byId.has(id)) {
+      throw new DocspecError(`Duplicate how-to id "${id}"`, absolutePath);
+    }
+    byId.set(id, {
+      id,
+      persona: frontmatter.persona,
+      tasks: frontmatter.tasks,
+      goal: frontmatter.goal,
+      body,
+      absolutePath,
+    });
+  }
+  return [...byId.values()];
+}
+
+type Row = {
+  id: string;
+  persona: string;
+  prereq_concepts: string[];
+  learns_concepts: string[];
+  goal?: string;
+  body: string;
+  absolutePath: string;
+};
+
+export async function readTutorialsDir(
+  tutorialsDir: string,
+): Promise<{ intents: TutorialIntent[]; orderPath: string | null }> {
+  // Collect one intent per tutorial .md (id from frontmatter or slugified filename).
+  const byId = new Map<string, Row>();
+  for (const name of await readdir(tutorialsDir)) {
+    if (!name.endsWith('.md')) continue;
+    const absolutePath = join(tutorialsDir, name);
+    if (!(await stat(absolutePath)).isFile()) continue;
+    const stem = basename(name, '.md');
+    const { data, body } = await readMarkdownFile(absolutePath);
+    let frontmatter;
+    try {
+      frontmatter = TutorialFileFrontmatterSchema.parse(data);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new DocspecError(`Invalid tutorial frontmatter: ${msg}`, absolutePath);
+    }
+    const id = resolveDocspecSlugId(frontmatter.id, stem, absolutePath);
+    if (byId.has(id)) {
+      throw new DocspecError(`Duplicate tutorial id "${id}"`, absolutePath);
+    }
+    byId.set(id, {
+      id,
+      persona: frontmatter.persona,
+      prereq_concepts: frontmatter.prereq_concepts,
+      learns_concepts: frontmatter.learns_concepts,
+      goal: frontmatter.goal,
+      body,
+      absolutePath,
+    });
+  }
+
+  const orderPath = await resolveTutorialsIndexPath(tutorialsDir);
+  if (byId.size === 0) {
+    // Empty tutorials/ is allowed (optional product section).
+    return { intents: [], orderPath };
+  }
+
+  if (!orderPath) {
+    // No index: stable order by id; prereq_id stays null (only index.yaml defines the thread).
+    const sortedIds = [...byId.keys()].sort((a, b) => a.localeCompare(b));
+    const intents: TutorialIntent[] = sortedIds.map((id, i) => {
+      const row = byId.get(id)!;
+      return {
+        id: row.id,
+        persona: row.persona,
+        order: i + 1,
+        prereq_id: null,
+        prereq_concepts: row.prereq_concepts,
+        learns_concepts: row.learns_concepts,
+        goal: row.goal,
+        body: row.body,
+        absolutePath: row.absolutePath,
+      };
+    });
+    return { intents, orderPath: null };
+  }
+
+  // With index: YAML supplies order + prereq_id; .md files supply persona, concepts, goal, body.
+  const raw = (await readFile(orderPath, 'utf8')).trim();
+  if (!raw) {
+    throw new DocspecError('Tutorial index file is empty but tutorial .md files exist', orderPath);
+  }
+  const indexRows = parseYamlListFile(orderPath, raw, TutorialIndexEntrySchema);
+  const seenIndex = new Set<string>();
+  for (const row of indexRows) {
+    if (seenIndex.has(row.id)) {
+      throw new DocspecError(`Duplicate tutorial id "${row.id}" in index`, orderPath);
+    }
+    seenIndex.add(row.id);
+  }
+
+  // Index and disk must describe the same set of ids (no extras either way).
+  const mdIds = new Set(byId.keys());
+  const indexIds = new Set(indexRows.map((r) => r.id));
+  for (const id of mdIds) {
+    if (!indexIds.has(id)) {
+      throw new DocspecError(
+        `Tutorial "${id}" has a .md file but is not listed in the index (every tutorial must appear exactly once)`,
+        byId.get(id)!.absolutePath,
+      );
+    }
+  }
+  for (const id of indexIds) {
+    if (!mdIds.has(id)) {
+      throw new DocspecError(
+        `Index references unknown tutorial id "${id}" (no matching .md in tutorials/)`,
+        orderPath,
+      );
+    }
+  }
+
+  const intents: TutorialIntent[] = indexRows.map((idx) => {
+    const row = byId.get(idx.id)!;
+    return {
+      id: row.id,
+      persona: row.persona,
+      order: idx.order,
+      prereq_id: idx.prereq_id ?? null,
+      prereq_concepts: row.prereq_concepts,
+      learns_concepts: row.learns_concepts,
+      goal: row.goal,
+      body: row.body,
+      absolutePath: row.absolutePath,
+    };
+  });
+  return { intents, orderPath };
 }
 
 export async function readDocspec(docspecDir: string): Promise<ParsedDocspec> {
@@ -290,15 +457,20 @@ export async function readDocspec(docspecDir: string): Promise<ParsedDocspec> {
         }
       }
 
-      // Declarative links from product → how-tos / tutorials (YAML lists at product root).
-      const howTosPath = await resolveProductYamlManifestPath(productDir, 'how-tos');
-      const tutorialsPath = await resolveProductYamlManifestPath(productDir, 'tutorials');
-      const howTosManifest = howTosPath
-        ? await readOptionalYamlManifest(howTosPath, HowToIntentSchema)
-        : null;
-      const tutorialsManifest = tutorialsPath
-        ? await readOptionalYamlManifest(tutorialsPath, TutorialIntentSchema)
-        : null;
+      // Optional Diátaxis sections: absent dirs → null manifests; tutorialsOrderPath set only when index.yaml|yml exists.
+      const howTosDir = join(productDir, 'how-tos');
+      const howTosDirPath = (await isDir(howTosDir)) ? howTosDir : null;
+      const howTosManifest = howTosDirPath ? await readHowTosDir(howTosDirPath) : null;
+
+      const tutorialsDir = join(productDir, 'tutorials');
+      const tutorialsDirPath = (await isDir(tutorialsDir)) ? tutorialsDir : null;
+      let tutorialsManifest: TutorialIntent[] | null = null;
+      let tutorialsOrderPath: string | null = null;
+      if (tutorialsDirPath) {
+        const tut = await readTutorialsDir(tutorialsDirPath);
+        tutorialsManifest = tut.intents;
+        tutorialsOrderPath = tut.orderPath;
+      }
 
       products.push({
         id: productId,
@@ -306,9 +478,10 @@ export async function readDocspec(docspecDir: string): Promise<ParsedDocspec> {
         productRules,
         personas,
         concepts,
-        howTosManifestPath: howTosPath,
+        howTosDirPath,
         howTosManifest,
-        tutorialsManifestPath: tutorialsPath,
+        tutorialsDirPath,
+        tutorialsOrderPath,
         tutorialsManifest,
       });
     }

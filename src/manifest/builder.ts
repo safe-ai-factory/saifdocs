@@ -4,12 +4,11 @@
  * Order of `read` matters where noted (e.g. persona rules before persona prose).
  */
 import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { MANIFEST_VERSION } from '../constants.js';
 import { DocspecError } from '../docspec/errors.js';
-import type { TutorialIntent } from '../docspec/schema.js';
-import type { ParsedDocspec } from '../docspec/types.js';
+import type { ParsedDocspec, TutorialIntent } from '../docspec/types.js';
 import type { GenSettings, ManifestDocument, ManifestEntry, OutputType } from './types.js';
 
 // --- helpers ---
@@ -109,7 +108,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         read: dedupeRead(read),
         productId: null,
         personaId: null,
-        taskId: null,
+        taskIds: [],
         conceptId: null,
         tutorialPosition: null,
         tutorialThreadLength: null,
@@ -151,7 +150,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           read: dedupeRead(read),
           productId: product.id,
           personaId: null,
-          taskId: null,
+          taskIds: [],
           conceptId: concept.id,
           tutorialPosition: null,
           tutorialThreadLength: null,
@@ -161,7 +160,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
     }
   };
 
-  // How-to: persona rules → persona → task → product rules → global → template → prereq concepts → existing ref outputs.
+  // How-to: persona rules → persona → how-to intent .md → task files → product rules → global → template → prereq concepts → existing ref outputs.
   const pushHowToEntries = (): void => {
     if (!settingsIncludeType(settings, 'how-tos')) return;
     const existingRefs = referenceOutputsExisting();
@@ -169,35 +168,52 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
       const intents = product.howTosManifest ?? [];
       for (const intent of intents) {
         const persona = findPersona(product, intent.persona);
-        const task = persona.tasks.find((t) => t.id === intent.task);
-        if (!task) {
-          const howTosDecl =
-            product.howTosManifestPath ??
-            join(dirname(product.product.absolutePath), 'how-tos.yaml');
-          throw new DocspecError(
-            `How-to "${intent.id}" references missing task "${intent.task}" for persona "${intent.persona}"`,
-            howTosDecl,
-          );
+        const taskFiles: {
+          id: string;
+          absolutePath: string;
+          frontmatter: { prereq_concepts: string[] };
+        }[] = [];
+        for (const taskStem of intent.tasks) {
+          const task = persona.tasks.find((t) => t.id === taskStem);
+          if (!task) {
+            throw new DocspecError(
+              `How-to "${intent.id}" references missing task "${taskStem}" for persona "${intent.persona}"`,
+              intent.absolutePath,
+            );
+          }
+          taskFiles.push(task);
         }
         const output = join(outputDir, 'products', product.id, 'how-tos', `${intent.id}.md`);
         const read: string[] = [];
         if (persona.personaRules) read.push(persona.personaRules.absolutePath);
         read.push(persona.persona.absolutePath);
-        read.push(task.absolutePath);
+        read.push(intent.absolutePath);
+        for (const task of taskFiles) {
+          read.push(task.absolutePath);
+        }
         read.push(product.product.absolutePath);
         if (product.productRules) read.push(product.productRules.absolutePath);
         if (globalRulesPath) read.push(globalRulesPath);
         const tpl = pageTemplateIfExists(docspecDir, 'how-to');
         if (tpl) read.push(tpl);
-        for (const cid of task.frontmatter.prereq_concepts) {
+        const prereqConceptsOrdered: string[] = [];
+        const seenConcept = new Set<string>();
+        for (const task of taskFiles) {
+          for (const cid of task.frontmatter.prereq_concepts) {
+            if (seenConcept.has(cid)) continue;
+            seenConcept.add(cid);
+            prereqConceptsOrdered.push(cid);
+          }
+        }
+        for (const cid of prereqConceptsOrdered) {
           try {
             const c = findConcept(product, cid);
             read.push(c.absolutePath);
           } catch (e) {
             if (e instanceof DocspecError) {
               throw new DocspecError(
-                `Task "${task.id}" references unknown prereq concept "${cid}"`,
-                task.absolutePath,
+                `How-to "${intent.id}" prereq references unknown concept "${cid}" (from task definitions)`,
+                intent.absolutePath,
               );
             }
             throw e;
@@ -206,13 +222,13 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         read.push(...existingRefs);
 
         entries.push({
-          id: `how-to--${product.id}--${intent.persona}--${intent.task}`,
+          id: `how-to--${product.id}--${intent.id}`,
           type: 'how-tos',
           output,
           read: dedupeRead(read),
           productId: product.id,
           personaId: intent.persona,
-          taskId: intent.task,
+          taskIds: [...intent.tasks],
           conceptId: null,
           tutorialPosition: null,
           tutorialThreadLength: null,
@@ -227,17 +243,13 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
     if (!settingsIncludeType(settings, 'tutorials')) return;
     for (const product of parsed.products) {
       const intents = product.tutorialsManifest ?? [];
-      const tutorialsManifestPath =
-        product.tutorialsManifestPath ??
-        join(dirname(product.product.absolutePath), 'tutorials.yaml');
+      const tutorialsErrorPath =
+        product.tutorialsOrderPath ?? product.tutorialsDirPath ?? product.product.absolutePath;
 
       const seenTutorialIds = new Set<string>();
       for (const t of intents) {
         if (seenTutorialIds.has(t.id)) {
-          throw new DocspecError(
-            `Duplicate tutorial id "${t.id}" in tutorials manifest`,
-            tutorialsManifestPath,
-          );
+          throw new DocspecError(`Duplicate tutorial id "${t.id}"`, tutorialsErrorPath);
         }
         seenTutorialIds.add(t.id);
       }
@@ -268,6 +280,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         const read: string[] = [];
         if (persona.personaRules) read.push(persona.personaRules.absolutePath);
         read.push(persona.persona.absolutePath);
+        read.push(intent.absolutePath);
         read.push(product.product.absolutePath);
         if (product.productRules) read.push(product.productRules.absolutePath);
         if (globalRulesPath) read.push(globalRulesPath);
@@ -281,7 +294,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
             if (e instanceof DocspecError) {
               throw new DocspecError(
                 `Tutorial "${intent.id}" references unknown concept "${cid}" in prereq_concepts`,
-                tutorialsManifestPath,
+                tutorialsErrorPath,
               );
             }
             throw e;
@@ -295,7 +308,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
             if (e instanceof DocspecError) {
               throw new DocspecError(
                 `Tutorial "${intent.id}" references unknown concept "${cid}" in learns_concepts`,
-                tutorialsManifestPath,
+                tutorialsErrorPath,
               );
             }
             throw e;
@@ -306,13 +319,13 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           if (!prereq) {
             throw new DocspecError(
               `Tutorial "${intent.id}" references unknown prereq_id "${intent.prereq_id}"`,
-              tutorialsManifestPath,
+              tutorialsErrorPath,
             );
           }
           if (prereq.persona !== intent.persona) {
             throw new DocspecError(
               `Tutorial "${intent.id}" prereq_id "${intent.prereq_id}" must be a tutorial for the same persona ("${intent.persona}")`,
-              tutorialsManifestPath,
+              tutorialsErrorPath,
             );
           }
           const thread = threadByPersona.get(intent.persona)!;
@@ -321,7 +334,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           if (prereqIdx < 0 || selfIdx < 0 || prereqIdx >= selfIdx) {
             throw new DocspecError(
               `Tutorial "${intent.id}" prereq_id must reference an earlier step in the same persona thread (sorted by order, then id)`,
-              tutorialsManifestPath,
+              tutorialsErrorPath,
             );
           }
           const prereqOut = join(tutorialDir, `${prereq.id}.md`);
@@ -335,7 +348,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         if (!posMeta) {
           throw new DocspecError(
             `Internal error: missing position meta for tutorial "${intent.id}"`,
-            tutorialsManifestPath,
+            tutorialsErrorPath,
           );
         }
 
@@ -346,7 +359,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           read: dedupeRead(read),
           productId: product.id,
           personaId: intent.persona,
-          taskId: null,
+          taskIds: [],
           conceptId: null,
           tutorialPosition: posMeta.position,
           tutorialThreadLength: posMeta.length,
@@ -379,7 +392,7 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         read: dedupeRead(read),
         productId: product.id,
         personaId: null,
-        taskId: null,
+        taskIds: [],
         conceptId: null,
         tutorialPosition: null,
         tutorialThreadLength: null,

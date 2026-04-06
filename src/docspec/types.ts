@@ -1,10 +1,8 @@
 import type {
   ConceptFrontmatter,
-  HowToIntent,
   PageTemplateFrontmatter,
   ReferencePointerFrontmatter,
   TaskFrontmatter,
-  TutorialIntent,
 } from './schema.js';
 
 export type GlobalRules = {
@@ -74,17 +72,42 @@ export type PersonaEntry = {
   tasks: TaskFile[];
 };
 
+/** One how-to intent from `products/<id>/how-tos/<slug>.md`. */
+export type HowToIntent = {
+  id: string;
+  persona: string;
+  tasks: string[];
+  goal?: string;
+  body: string;
+  absolutePath: string;
+};
+
+/** One tutorial intent assembled from `tutorials/*.md` and optional `index.yaml`. */
+export type TutorialIntent = {
+  id: string;
+  persona: string;
+  order: number;
+  prereq_id: string | null;
+  prereq_concepts: string[];
+  learns_concepts: string[];
+  goal?: string;
+  body: string;
+  absolutePath: string;
+};
+
 export type ProductEntry = {
   id: string;
   product: ProductFile;
   productRules: ProductRules | null;
   personas: PersonaEntry[];
   concepts: ConceptFile[];
-  /** Absolute path to `how-tos.yaml` or `how-tos.yml` when that manifest was read; otherwise null. */
-  howTosManifestPath: string | null;
+  /** Absolute path to `how-tos/` when present; otherwise null. */
+  howTosDirPath: string | null;
   howTosManifest: HowToIntent[] | null;
-  /** Absolute path to `tutorials.yaml` or `tutorials.yml` when that manifest was read; otherwise null. */
-  tutorialsManifestPath: string | null;
+  /** Absolute path to `tutorials/` when present; otherwise null. */
+  tutorialsDirPath: string | null;
+  /** Absolute path to `tutorials/index.yaml` or `index.yml` when that file was used; otherwise null. */
+  tutorialsOrderPath: string | null;
   tutorialsManifest: TutorialIntent[] | null;
 };
 

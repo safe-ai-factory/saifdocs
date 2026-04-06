@@ -147,11 +147,28 @@ export function runSaifctlSandboxCli(opts: RunSandboxCliOpts): Promise<{ code: n
       stdio: 'inherit',
       env: { ...process.env },
     });
+
+    // Forward termination signals so saifctl's own signal handlers (CleanupRegistry) run and
+    // remove Leash/coder containers before the child exits. Without this, killing the saifdocs
+    // parent via SIGINT can leave the saifctl child running (or dead with orphaned containers)
+    // because the child may not share the parent's process group.
+    const forwardSignal = (sig: NodeJS.Signals) => {
+      if (!child.killed) child.kill(sig);
+    };
+    const onSigint = () => forwardSignal('SIGINT');
+    const onSigterm = () => forwardSignal('SIGTERM');
+    process.once('SIGINT', onSigint);
+    process.once('SIGTERM', onSigterm);
+
     child.on('error', (err) => {
+      process.off('SIGINT', onSigint);
+      process.off('SIGTERM', onSigterm);
       console.error('[saifdocs] Failed to spawn saifctl:', err);
       resolvePromise({ code: 1 });
     });
     child.on('close', (code) => {
+      process.off('SIGINT', onSigint);
+      process.off('SIGTERM', onSigterm);
       resolvePromise({ code });
     });
   });

@@ -2,7 +2,7 @@
  * Tests for `buildManifest` (`builder.ts`) and docspec parsing used by the manifest pipeline.
  * Named `builder.test.ts` to match the module under test (there is no `manifest.ts` entrypoint).
  */
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,8 +40,10 @@ describe('buildManifest', () => {
     expect(types).toEqual(['concepts', 'how-tos', 'landing-pages', 'references']);
 
     const howTo = manifest.entries.find((e) => e.type === 'how-tos');
-    expect(howTo?.id).toBe('how-to--p1--u1--t1');
+    expect(howTo?.id).toBe('how-to--p1--how-one');
+    expect(howTo?.taskIds).toEqual(['t1']);
     expect(howTo?.read.some((p) => p.includes('personas/u1/rules.md'))).toBe(true);
+    expect(howTo?.read.some((p) => p.includes('how-tos/how-one.md'))).toBe(true);
     expect(howTo?.read.some((p) => p.includes('concepts/c1.md'))).toBe(true);
   });
 
@@ -95,20 +97,40 @@ describe('buildManifest', () => {
     try {
       const docs = join(root, 'docspec');
       await cp(minimalDocspec, docs, { recursive: true });
+      const tutDir = join(docs, 'products', 'p1', 'tutorials');
+      await mkdir(tutDir, { recursive: true });
       await writeFile(
-        join(docs, 'products', 'p1', 'tutorials.yaml'),
+        join(tutDir, 'first.md'),
+        `---
+persona: u1
+prereq_concepts: []
+learns_concepts: []
+---
+
+First tutorial intent.
+`,
+        'utf8',
+      );
+      await writeFile(
+        join(tutDir, 'second.md'),
+        `---
+persona: u1
+prereq_concepts: []
+learns_concepts: []
+---
+
+Second tutorial intent.
+`,
+        'utf8',
+      );
+      await writeFile(
+        join(tutDir, 'index.yaml'),
         `- id: first
-  persona: u1
   order: 1
   prereq_id: null
-  prereq_concepts: []
-  learns_concepts: []
 - id: second
-  persona: u1
   order: 2
   prereq_id: first
-  prereq_concepts: []
-  learns_concepts: []
 `,
         'utf8',
       );
@@ -140,40 +162,23 @@ describe('buildManifest', () => {
 });
 
 describe('readDocspec validation', () => {
-  it('accepts how-tos.yml as well as how-tos.yaml', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'saifdocs-yml-howto-'));
+  it('throws DocspecError when both tutorials/index.yaml and tutorials/index.yml exist', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'saifdocs-dup-tut-index-'));
     try {
       const docs = join(root, 'docspec');
       await cp(minimalDocspec, docs, { recursive: true });
-      await rm(join(docs, 'products', 'p1', 'how-tos.yaml'));
+      const tutDir = join(docs, 'products', 'p1', 'tutorials');
+      await mkdir(tutDir, { recursive: true });
       await writeFile(
-        join(docs, 'products', 'p1', 'how-tos.yml'),
-        await readFile(join(minimalDocspec, 'products', 'p1', 'how-tos.yaml'), 'utf8'),
+        join(tutDir, 'a.md'),
+        `---
+persona: u1
+---
+`,
         'utf8',
       );
-      const parsed = await readDocspec(docs);
-      const manifest = buildManifest(
-        parsed,
-        baseSettings({
-          docspecDir: docs,
-          projectDir: minimalProject,
-          outputDir: join(root, 'out'),
-        }),
-      );
-      expect(parsed.products[0]?.howTosManifestPath?.endsWith('how-tos.yml')).toBe(true);
-      expect(manifest.entries.some((e) => e.type === 'how-tos')).toBe(true);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it('throws DocspecError when both how-tos.yaml and how-tos.yml exist', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'saifdocs-dup-howto-'));
-    try {
-      const docs = join(root, 'docspec');
-      await cp(minimalDocspec, docs, { recursive: true });
-      const yamlContent = await readFile(join(docs, 'products', 'p1', 'how-tos.yaml'), 'utf8');
-      await writeFile(join(docs, 'products', 'p1', 'how-tos.yml'), yamlContent, 'utf8');
+      await writeFile(join(tutDir, 'index.yaml'), `- id: a\n  order: 1\n`, 'utf8');
+      await writeFile(join(tutDir, 'index.yml'), `- id: a\n  order: 1\n`, 'utf8');
       await expect(readDocspec(docs)).rejects.toMatchObject({ name: 'DocspecError' });
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -203,7 +208,7 @@ describe('buildManifest errors', () => {
   it('throws DocspecError when how-to references a missing task file', async () => {
     const root = join(__dirname, '__fixtures__', 'missing-howto-task');
     const docspecPath = join(root, 'docspec');
-    const howTosPath = join(docspecPath, 'products', 'p1', 'how-tos.yaml');
+    const howToIntentPath = join(docspecPath, 'products', 'p1', 'how-tos', 'broken-how-to.md');
     const parsed = await readDocspec(docspecPath);
     const settings = baseSettings({
       docspecDir: docspecPath,
@@ -217,7 +222,7 @@ describe('buildManifest errors', () => {
       err = e;
     }
     expect(err).toBeInstanceOf(DocspecError);
-    expect((err as DocspecError).filePath).toBe(howTosPath);
+    expect((err as DocspecError).filePath).toBe(howToIntentPath);
     expect((err as DocspecError).message).toContain('missing-task-id');
   });
 
@@ -255,7 +260,9 @@ Task body.
         err = e;
       }
       expect(err).toBeInstanceOf(DocspecError);
-      expect((err as DocspecError).filePath).toBe(taskPath);
+      expect((err as DocspecError).filePath).toBe(
+        join(docs, 'products', 'p1', 'how-tos', 'how-one.md'),
+      );
       expect((err as DocspecError).message).toContain('not-a-real-concept');
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -5,7 +5,7 @@
  * (structural completeness). Distinct from `validate` (staleness vs manifest inputs).
  */
 import { access } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import type { ParsedDocspec } from '../docspec/types.js';
 import { findConcept } from './audit-helpers.js';
@@ -68,9 +68,6 @@ export async function runAudit(parsed: ParsedDocspec, outputDir: string): Promis
   }
 
   for (const product of parsed.products) {
-    // Parent of product.md: manifest may be how-tos.{yaml,yml} / tutorials.{yaml,yml}
-    const productRoot = dirname(product.product.absolutePath);
-
     // Intent files under docspec/products/<id>/concepts/ → generated concept pages
     for (const concept of product.concepts) {
       checkedCount++;
@@ -91,8 +88,7 @@ export async function runAudit(parsed: ParsedDocspec, outputDir: string): Promis
       }
     }
 
-    // YAML list in how-tos.{yaml,yml} → one file per intent id under products/<id>/how-tos/
-    const howTosDecl = product.howTosManifestPath ?? join(productRoot, 'how-tos.yaml');
+    // `how-tos/*.md` intents → one generated file per id under products/<id>/how-tos/
     for (const intent of product.howTosManifest ?? []) {
       checkedCount++;
       const expectedOutput = join(outputDir, 'products', product.id, 'how-tos', `${intent.id}.md`);
@@ -101,13 +97,12 @@ export async function runAudit(parsed: ParsedDocspec, outputDir: string): Promis
           type: 'missing-how-to',
           id: intent.id,
           expectedOutput,
-          declaredIn: howTosDecl,
+          declaredIn: intent.absolutePath,
         });
       }
     }
 
-    // YAML list in tutorials.{yaml,yml} → products/<id>/tutorials/<intent.id>.md
-    const tutorialsDecl = product.tutorialsManifestPath ?? join(productRoot, 'tutorials.yaml');
+    // `tutorials/*.md` (+ optional index) → products/<id>/tutorials/<intent.id>.md
     for (const intent of product.tutorialsManifest ?? []) {
       checkedCount++;
       const expectedOutput = join(
@@ -122,7 +117,7 @@ export async function runAudit(parsed: ParsedDocspec, outputDir: string): Promis
           type: 'missing-tutorial',
           id: intent.id,
           expectedOutput,
-          declaredIn: tutorialsDecl,
+          declaredIn: intent.absolutePath,
         });
       }
     }

@@ -27,7 +27,7 @@ describe('runUpdateCore', () => {
       read: partial.read ?? [],
       productId: partial.productId ?? null,
       personaId: partial.personaId ?? null,
-      taskId: partial.taskId ?? null,
+      taskIds: partial.taskIds ?? [],
       conceptId: partial.conceptId ?? null,
       tutorialPosition: partial.tutorialPosition ?? null,
       tutorialThreadLength: partial.tutorialThreadLength ?? null,

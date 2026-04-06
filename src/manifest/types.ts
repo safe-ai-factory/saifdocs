@@ -9,7 +9,8 @@ export type ManifestEntry = {
   read: string[];
   productId: string | null;
   personaId: string | null;
-  taskId: string | null;
+  /** Task stems referenced by a how-to (empty for non-how-to entries). */
+  taskIds: string[];
   conceptId: string | null;
   /** 1-based position within this tutorial thread. */
   tutorialPosition: number | null;

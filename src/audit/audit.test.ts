@@ -50,19 +50,30 @@ describe('runAudit', () => {
     expect(result.checkedCount).toBeGreaterThan(0);
   });
 
-  it('reports missing-tutorial when tutorials.yaml declares intents but output is absent', async () => {
+  it('reports missing-tutorial when tutorials/ declares intents but output is absent', async () => {
     const base = await mkdtemp(join(tmpdir(), 'saifdocs-audit-tut-'));
     auditTmpDirs.push(base);
     const docs = join(base, 'docspec');
     await cp(fixtureDir, docs, { recursive: true });
+    const tutDir = join(docs, 'products', 'p1', 'tutorials');
+    await mkdir(tutDir, { recursive: true });
     await writeFile(
-      join(docs, 'products', 'p1', 'tutorials.yaml'),
+      join(tutDir, 'tut-one.md'),
+      `---
+persona: u1
+prereq_concepts: []
+learns_concepts: []
+---
+
+Tutorial intent.
+`,
+      'utf8',
+    );
+    await writeFile(
+      join(tutDir, 'index.yaml'),
       `- id: tut-one
-  persona: u1
   order: 1
   prereq_id: null
-  prereq_concepts: []
-  learns_concepts: []
 `,
       'utf8',
     );

@@ -97,32 +97,50 @@ function countEntriesToGenerate(
   return n;
 }
 
-/** Manifest `read` includes the docspec task path; match by `…/tasks/<taskId>.md` (Windows-safe). */
-function findTaskFileInRead(entry: ManifestEntry): string | undefined {
-  if (!entry.taskId) return undefined;
-  const needle = `/tasks/${entry.taskId}.md`;
-  return entry.read.find((p) => p.replace(/\\/g, '/').endsWith(needle));
+/** Manifest `read` includes docspec task paths; match by `…/tasks/<taskId>.md` (Windows-safe). */
+function findTaskFilesInRead(entry: ManifestEntry): string[] {
+  const out: string[] = [];
+  for (const taskId of entry.taskIds) {
+    const needle = `/tasks/${taskId}.md`;
+    const p = entry.read.find((x) => x.replace(/\\/g, '/').endsWith(needle));
+    if (p) out.push(p);
+  }
+  return out;
 }
 
-/** Pull arrival_context / search_terms / user_stage into the sandbox task body so the agent need not re-open the task file. */
+/** Pull arrival_context / search_terms / user_stage from task frontmatter (first task sets enums; search_terms merged). */
 async function loadHowToTaskHints(entry: ManifestEntry): Promise<HowToTaskHints | undefined> {
-  const taskPath = findTaskFileInRead(entry);
-  if (!taskPath) return undefined;
-  try {
-    const raw = await readFile(taskPath, 'utf8');
-    const parsed = matter(raw);
-    const result = TaskFrontmatterSchema.safeParse(parsed.data);
-    if (!result.success) return undefined;
-    const d = result.data;
-    const hints: HowToTaskHints = {
-      arrival_context: d.arrival_context,
-      user_stage: d.user_stage,
-    };
-    if (d.search_terms?.length) hints.search_terms = d.search_terms;
-    return hints;
-  } catch {
-    return undefined;
+  const taskPaths = findTaskFilesInRead(entry);
+  if (taskPaths.length === 0) return undefined;
+  let hints: HowToTaskHints | undefined;
+  const mergedTerms: string[] = [];
+  const seenTerm = new Set<string>();
+  for (const taskPath of taskPaths) {
+    try {
+      const raw = await readFile(taskPath, 'utf8');
+      const parsed = matter(raw);
+      const result = TaskFrontmatterSchema.safeParse(parsed.data);
+      if (!result.success) continue;
+      const d = result.data;
+      if (!hints) {
+        hints = {
+          arrival_context: d.arrival_context,
+          user_stage: d.user_stage,
+        };
+      }
+      for (const t of d.search_terms ?? []) {
+        if (!seenTerm.has(t)) {
+          seenTerm.add(t);
+          mergedTerms.push(t);
+        }
+      }
+    } catch {
+      /* skip bad task file */
+    }
   }
+  if (!hints) return undefined;
+  if (mergedTerms.length) hints.search_terms = mergedTerms;
+  return hints;
 }
 
 function renderTaskMarkdown(

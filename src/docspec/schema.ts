@@ -1,5 +1,10 @@
 import { z } from 'zod';
 
+/** Lowercase kebab-case slug for docspec `id` fields. */
+export const SlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
+  message: 'must be lowercase kebab-case (e.g. "my-how-to")',
+});
+
 /** Task audience maturity for how-to framing (was `day_n` 0/1/2). */
 export const TaskUserStageSchema = z.enum(['evaluating', 'getting-started', 'established']);
 
@@ -26,28 +31,32 @@ export const PageTemplateFrontmatterSchema = z.object({
   intent: z.string().optional(),
 });
 
-export const HowToIntentSchema = z.object({
-  id: z.string(),
+/** Frontmatter for `products/<id>/how-tos/*.md`. `id` defaults to slugified filename stem. */
+export const HowToFileFrontmatterSchema = z.object({
+  id: SlugSchema.optional(),
   persona: z.string(),
-  task: z.string(),
+  tasks: z.array(z.string().min(1)).min(1),
   goal: z.string().optional(),
 });
 
-export const TutorialIntentSchema = z.object({
-  id: z.string(),
+/** Frontmatter for `products/<id>/tutorials/*.md` (ordering lives in optional `index.yaml`). */
+export const TutorialFileFrontmatterSchema = z.object({
+  id: SlugSchema.optional(),
   persona: z.string(),
-  /** Generation order within the product (lower first). Same persona’s thread uses this for sorting. */
+  prereq_concepts: z.array(z.string()).default([]),
+  learns_concepts: z.array(z.string()).default([]),
+  goal: z.string().optional(),
+});
+
+/** One row in `tutorials/index.yaml` (or `index.yml`). */
+export const TutorialIndexEntrySchema = z.object({
+  id: SlugSchema,
   order: z.number().int().positive(),
   /** Prior tutorial in the same persona thread; output path is added to the read list. */
   prereq_id: z
     .union([z.string().min(1), z.null()])
     .optional()
     .default(null),
-  /** Concept ids the reader is assumed to already know at this stage. */
-  prereq_concepts: z.array(z.string()),
-  /** Concept ids introduced or reinforced in this stage (build adds these concept files to the read list). */
-  learns_concepts: z.array(z.string()),
-  goal: z.string().optional(),
 });
 
 export type TaskUserStage = z.infer<typeof TaskUserStageSchema>;
@@ -55,5 +64,6 @@ export type TaskFrontmatter = z.infer<typeof TaskFrontmatterSchema>;
 export type ConceptFrontmatter = z.infer<typeof ConceptFrontmatterSchema>;
 export type ReferencePointerFrontmatter = z.infer<typeof ReferencePointerFrontmatterSchema>;
 export type PageTemplateFrontmatter = z.infer<typeof PageTemplateFrontmatterSchema>;
-export type HowToIntent = z.infer<typeof HowToIntentSchema>;
-export type TutorialIntent = z.infer<typeof TutorialIntentSchema>;
+export type HowToFileFrontmatter = z.infer<typeof HowToFileFrontmatterSchema>;
+export type TutorialFileFrontmatter = z.infer<typeof TutorialFileFrontmatterSchema>;
+export type TutorialIndexEntry = z.infer<typeof TutorialIndexEntrySchema>;

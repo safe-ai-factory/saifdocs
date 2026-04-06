@@ -21,7 +21,7 @@ const ManifestEntrySchema: z.ZodType<ManifestEntry> = z.object({
   read: z.array(z.string()),
   productId: z.string().nullable(),
   personaId: z.string().nullable(),
-  taskId: z.string().nullable(),
+  taskIds: z.array(z.string()),
   conceptId: z.string().nullable(),
   tutorialPosition: z.number().int().positive().nullable(),
   tutorialThreadLength: z.number().int().positive().nullable(),

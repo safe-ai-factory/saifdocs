@@ -15,7 +15,7 @@ import {
 describe('renderReferenceTaskFile', () => {
   const projectDir = resolve('/repo/proj');
 
-  it('embeds absolute read paths and workspace-relative output in body', () => {
+  it('translates host-absolute paths to /workspace/-relative paths in body and frontmatter', () => {
     const entry: ManifestEntry = {
       id: 'reference--commands--test-cmd',
       type: 'references',
@@ -26,7 +26,7 @@ describe('renderReferenceTaskFile', () => {
       ],
       productId: null,
       personaId: null,
-      taskId: null,
+      taskIds: [],
       conceptId: null,
       tutorialPosition: null,
       tutorialThreadLength: null,
@@ -38,14 +38,17 @@ describe('renderReferenceTaskFile', () => {
 
     expect(parsed.data).toMatchObject({
       type: 'references',
-      output: entry.output,
+      output: '/workspace/docs/references/commands/test-cmd.md',
     });
-    expect(parsed.data.read).toEqual(entry.read);
+    expect(parsed.data.read).toEqual([
+      '/workspace/docspec/references/commands/test-cmd.md',
+      '/workspace/src/cli.ts',
+    ]);
     expect(parsed.data.workspace_relative_output).toBe('docs/references/commands/test-cmd.md');
 
     expect(parsed.content).toContain('docs/references/commands/test-cmd.md');
-    expect(parsed.content).toContain(entry.read[0]!);
-    expect(parsed.content).toContain(entry.read[1]!);
+    expect(parsed.content).toContain('/workspace/docspec/references/commands/test-cmd.md');
+    expect(parsed.content).toContain('/workspace/src/cli.ts');
   });
 });
 
@@ -60,7 +63,7 @@ describe('renderConceptTaskFile', () => {
       read: [resolve('/repo/proj/docspec/products/p1/concepts/c1.md')],
       productId: 'p1',
       personaId: null,
-      taskId: null,
+      taskIds: [],
       conceptId: 'c1',
       tutorialPosition: null,
       tutorialThreadLength: null,
@@ -71,11 +74,14 @@ describe('renderConceptTaskFile', () => {
     const parsed = matter(raw);
 
     expect(parsed.data.type).toBe('concepts');
+    expect(parsed.data.output).toBe('/workspace/docs/products/p1/concepts/c1.md');
+    expect(parsed.data.read).toEqual(['/workspace/docspec/products/p1/concepts/c1.md']);
     expect(parsed.content).toContain('concept / explanation');
     expect(parsed.content).toContain('Diátaxis');
     expect(parsed.content).toContain('learning_outcomes');
     expect(parsed.content).toContain('Do not write numbered step-by-step');
     expect(parsed.content).toContain('docs/products/p1/concepts/c1.md');
+    expect(parsed.content).toContain('/workspace/docspec/products/p1/concepts/c1.md');
   });
 });
 
@@ -90,7 +96,7 @@ describe('renderHowToTaskFile', () => {
       read: [resolve('/repo/proj/docspec/products/p1/personas/u1/tasks/t1.md')],
       productId: 'p1',
       personaId: 'u1',
-      taskId: 't1',
+      taskIds: ['t1'],
       conceptId: null,
       tutorialPosition: null,
       tutorialThreadLength: null,
@@ -114,7 +120,7 @@ describe('renderHowToTaskFile', () => {
       read: [],
       productId: 'p1',
       personaId: 'u1',
-      taskId: 't1',
+      taskIds: ['t1'],
       conceptId: null,
       tutorialPosition: null,
       tutorialThreadLength: null,
@@ -145,7 +151,7 @@ describe('renderTutorialTaskFile', () => {
       read: [resolve('/repo/proj/docspec/products/p1/concepts/c1.md')],
       productId: 'p1',
       personaId: 'openclaw_user',
-      taskId: null,
+      taskIds: [],
       conceptId: null,
       tutorialPosition: 2,
       tutorialThreadLength: 5,
@@ -178,7 +184,7 @@ describe('renderLandingPageTaskFile', () => {
       read: [resolve('/repo/proj/docspec/products/p1/product.md')],
       productId: 'p1',
       personaId: null,
-      taskId: null,
+      taskIds: [],
       conceptId: null,
       tutorialPosition: null,
       tutorialThreadLength: null,

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { sandboxPassthroughArgs } from '@safe-ai-factory/saifctl';
 import { defineCommand } from 'citty';
 
+import { DEFAULT_GATE_RETRIES } from '../../constants.js';
 import { DocspecError } from '../../docspec/errors.js';
 import { readDocspec } from '../../docspec/reader.js';
 import { generateEntries } from '../../generation/generate.js';
@@ -10,7 +11,6 @@ import { consola } from '../../logger.js';
 import { buildManifest } from '../../manifest/builder.js';
 import type { GenSettings } from '../../manifest/types.js';
 import { serializeManifest, writeManifestToDocspec } from '../../manifest/writer.js';
-import { DEFAULT_GATE_RETRIES } from '../../constants.js';
 import {
   docspecDirArg,
   dryRunArg,

@@ -17,7 +17,7 @@ describe('renderAuditReport', () => {
             type: 'missing-how-to',
             id: 'h1',
             expectedOutput: '/docs/how.md',
-            declaredIn: '/how-tos.yaml',
+            declaredIn: '/docspec/products/p1/how-tos/h1.md',
           },
           {
             type: 'missing-reference',

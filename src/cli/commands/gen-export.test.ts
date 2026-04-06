@@ -137,7 +137,7 @@ describe('CLI gen export manifest', () => {
             read: [],
             productId: null,
             personaId: null,
-            taskId: null,
+            taskIds: [],
             conceptId: null,
             tutorialPosition: null,
             tutorialThreadLength: null,

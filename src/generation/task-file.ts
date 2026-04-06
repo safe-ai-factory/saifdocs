@@ -7,6 +7,23 @@ import type { TaskFrontmatter } from '../docspec/schema.js';
 import type { ManifestEntry } from '../manifest/types.js';
 import { outputPathRelativeToProject } from './output-paths.js';
 
+/** Container workspace root — the project is mounted here inside the sandbox. */
+const CONTAINER_WORKSPACE = '/workspace';
+
+/**
+ * Translates a host-absolute path (from `entry.read` or `entry.output`) to the equivalent
+ * path inside the sandbox container, where the project is mounted at `/workspace`.
+ * Falls back to the original path if it cannot be made project-relative (e.g. a temp file).
+ */
+function toContainerPath(hostAbsPath: string, projectDir: string): string {
+  try {
+    const rel = outputPathRelativeToProject(projectDir, hostAbsPath);
+    return `${CONTAINER_WORKSPACE}/${rel}`;
+  } catch {
+    return hostAbsPath;
+  }
+}
+
 /** Optional task intent fields embedded in how-to task instructions (from docspec task frontmatter). */
 export type HowToTaskHints = {
   arrival_context?: TaskFrontmatter['arrival_context'];
@@ -16,7 +33,7 @@ export type HowToTaskHints = {
 
 export function renderReferenceTaskFile(entry: ManifestEntry, projectDir: string): string {
   const workspaceRel = outputPathRelativeToProject(projectDir, entry.output);
-  const readList = entry.read.map((p) => `- ${p}`).join('\n');
+  const readList = entry.read.map((p) => `- ${toContainerPath(p, projectDir)}`).join('\n');
 
   const body = `You are generating a **reference** documentation page (Diátaxis: reference — information-oriented, easy to scan).
 
@@ -46,9 +63,9 @@ When finished, ensure the output file exists at the path above and is not empty.
 `;
 
   const data = {
-    output: entry.output,
+    output: `${CONTAINER_WORKSPACE}/${workspaceRel}`,
     type: entry.type,
-    read: entry.read,
+    read: entry.read.map((p) => toContainerPath(p, projectDir)),
     workspace_relative_output: workspaceRel,
   };
 
@@ -57,7 +74,7 @@ When finished, ensure the output file exists at the path above and is not empty.
 
 export function renderConceptTaskFile(entry: ManifestEntry, projectDir: string): string {
   const workspaceRel = outputPathRelativeToProject(projectDir, entry.output);
-  const readList = entry.read.map((p) => `- ${p}`).join('\n');
+  const readList = entry.read.map((p) => `- ${toContainerPath(p, projectDir)}`).join('\n');
 
   const body = `You are generating a **concept / explanation** page (Diátaxis: explanation — understanding-oriented, not a how-to).
 
@@ -87,9 +104,9 @@ When finished, ensure the output file exists at the path above and is not empty.
 `;
 
   const data = {
-    output: entry.output,
+    output: `${CONTAINER_WORKSPACE}/${workspaceRel}`,
     type: entry.type,
-    read: entry.read,
+    read: entry.read.map((p) => toContainerPath(p, projectDir)),
     workspace_relative_output: workspaceRel,
   };
 
@@ -132,7 +149,7 @@ export function renderHowToTaskFile(
   hints?: HowToTaskHints,
 ): string {
   const workspaceRel = outputPathRelativeToProject(projectDir, entry.output);
-  const readList = entry.read.map((p) => `- ${p}`).join('\n');
+  const readList = entry.read.map((p) => `- ${toContainerPath(p, projectDir)}`).join('\n');
   const hintsBlock = formatHowToHintsBlock(hints);
 
   const body = `You are generating a **how-to guide** (Diátaxis: how-to — goal-oriented; reader wants to accomplish a specific outcome).
@@ -172,9 +189,9 @@ When finished, ensure the output file exists at the path above and is not empty.
 `;
 
   const data = {
-    output: entry.output,
+    output: `${CONTAINER_WORKSPACE}/${workspaceRel}`,
     type: entry.type,
-    read: entry.read,
+    read: entry.read.map((p) => toContainerPath(p, projectDir)),
     workspace_relative_output: workspaceRel,
     ...(hints && Object.keys(hints).length ? { how_to_hints: hints } : {}),
   };
@@ -184,7 +201,7 @@ When finished, ensure the output file exists at the path above and is not empty.
 
 export function renderTutorialTaskFile(entry: ManifestEntry, projectDir: string): string {
   const workspaceRel = outputPathRelativeToProject(projectDir, entry.output);
-  const readList = entry.read.map((p) => `- ${p}`).join('\n');
+  const readList = entry.read.map((p) => `- ${toContainerPath(p, projectDir)}`).join('\n');
   const pos = entry.tutorialPosition ?? 'unknown';
   const total = entry.tutorialThreadLength ?? 'unknown';
 
@@ -225,9 +242,9 @@ When finished, ensure the output file exists at the path above and is not empty.
 `;
 
   const data = {
-    output: entry.output,
+    output: `${CONTAINER_WORKSPACE}/${workspaceRel}`,
     type: entry.type,
-    read: entry.read,
+    read: entry.read.map((p) => toContainerPath(p, projectDir)),
     workspace_relative_output: workspaceRel,
     tutorial_position: entry.tutorialPosition,
     tutorial_thread_length: entry.tutorialThreadLength,
@@ -240,7 +257,7 @@ When finished, ensure the output file exists at the path above and is not empty.
 
 export function renderLandingPageTaskFile(entry: ManifestEntry, projectDir: string): string {
   const workspaceRel = outputPathRelativeToProject(projectDir, entry.output);
-  const readList = entry.read.map((p) => `- ${p}`).join('\n');
+  const readList = entry.read.map((p) => `- ${toContainerPath(p, projectDir)}`).join('\n');
 
   const body = `You are generating a **product landing / index page** (navigation root for one product; helps readers orient and choose their path).
 
@@ -272,9 +289,9 @@ When finished, ensure the output file exists at the path above and is not empty.
 `;
 
   const data = {
-    output: entry.output,
+    output: `${CONTAINER_WORKSPACE}/${workspaceRel}`,
     type: entry.type,
-    read: entry.read,
+    read: entry.read.map((p) => toContainerPath(p, projectDir)),
     workspace_relative_output: workspaceRel,
     product_id: entry.productId,
   };
