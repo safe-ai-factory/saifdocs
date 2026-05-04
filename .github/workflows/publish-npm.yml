@@ -1,10 +1,12 @@
 # Publishes via npm Trusted Publishing (OIDC) — no NPM_TOKEN required.
 #
 # Bootstrap (one-time, manual): publish v0.1.0 from a local CLI
-# (`npm publish dist-pack/safe-ai-factory-saifdocs-0.1.0.tgz --access public`),
-# then go to npmjs.com → @safe-ai-factory/saifdocs → Settings → Trusted
-# Publishers and add this repo + this workflow file. After that, CI handles
-# every subsequent tag push automatically via OIDC.
+# (`npm publish ./dist-pack/safe-ai-factory-saifdocs-0.1.0.tgz --access public`
+# — the `./` prefix is required; without it npm misparses the path as a
+# GitHub `<owner>/<repo>` shortcut and tries to clone it). Then go to
+# npmjs.com → @safe-ai-factory/saifdocs → Settings → Trusted Publishers
+# and add this repo + this workflow file. After that, CI handles every
+# subsequent tag push automatically via OIDC.
 
 name: Publish npm
 
@@ -51,4 +53,6 @@ jobs:
         run: bash scripts/package.sh
 
       - name: Publish verified tarball to npm (OIDC + provenance)
-        run: npm publish dist-pack/safe-ai-factory-saifdocs-*.tgz --access public --provenance
+        # `./` prefix forces file-path interpretation; without it npm matches
+        # the `<owner>/<repo>` GitHub shortcut pattern and tries to clone.
+        run: npm publish ./dist-pack/safe-ai-factory-saifdocs-*.tgz --access public --provenance
