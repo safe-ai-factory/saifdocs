@@ -4,169 +4,251 @@ Saifdocs reads a **docspec** (intent model: products, personas, tasks,
 concepts, reference pointers) and emits a saifctl feature tree. Run
 `saifctl feat run --feature <id>` to generate the actual docs.
 
+## How it works
+
+You describe **what to document** in a structured `docspec/` tree, run
+`saifdocs gen`, and it builds a feature tree that saifctl knows how to
+execute. Saifctl then drives an AI agent to write each page, with a
+review critic checking the result.
+
+```
+  docspec/                       (you write this — the intent tree)
+     │
+     │  saifdocs gen
+     ▼
+  saifctl/features/saifdocs-<timestamp>/    (saifdocs emits this)
+     │
+     │  saifctl feat run --feature <id>     (saifctl drives the agent)
+     ▼
+  docs/                          (the actual generated markdown pages)
+```
+
+Saifdocs itself never invokes an LLM; it's a *compile* step. Saifctl
+handles agent invocation, sandboxing, and per-page review.
+
 ## Requirements
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 9+
-- saifctl installed (you'll invoke `saifctl feat run` after each
-  `saifdocs gen`).
+- [saifctl](https://github.com/safe-ai-factory/saifctl) installed in
+  the project where you'll generate docs (you'll run
+  `saifctl feat run` after each `saifdocs gen`)
 
-## Usage
+## Quick start
 
-From this directory:
+### 1. Install
 
-```bash
-pnpm install
-pnpm build
-```
-
-Resolve `docspec/`, write `docspec/.manifest.json`, and emit a
-timestamped feature tree under `<project>/saifctl/features/`:
+In the project where you want to generate docs:
 
 ```bash
-node dist/cli.js gen --project-dir ../..
+pnpm add -D @safe-ai-factory/saifdocs
+# or, globally
+pnpm add -g @safe-ai-factory/saifdocs
 ```
 
-Output:
+After install, the `saifdocs` CLI is available (or via `npx saifdocs`).
+
+### 2. Author your docspec
+
+Saifdocs reads its instructions from a `docspec/` directory at your
+project root. A minimal layout looks like:
+
+```
+docspec/
+  products/
+    my-product/
+      product.md                 # what the product is, who it's for
+      rules.md                   # (optional) writing rules for the product
+      concepts/
+        auth.md                  # an explanatory concept page (intent)
+      how-tos/
+        get-started.md           # a task-oriented how-to (intent)
+      tutorials/
+        installation.md          # an end-to-end tutorial (intent)
+        index.yaml               # tutorial ordering
+      personas/
+        engineer/
+          persona.md             # who they are, what they care about
+          tasks/
+            install.md           # a task this persona wants to accomplish
+  reference/
+    commands/
+      my-product/
+        run.md                   # frontmatter `source:` points at the actual code
+```
+
+Each `.md` is an *intent file*: frontmatter declares structured fields
+(persona, prereq concepts, learning outcomes, source paths, etc.) and
+the body is freeform prose that the generator will read and expand. See
+the `docspec` concept page in the saifdocs docs for the full schema.
+
+> Tip: there's no `saifdocs init` scaffolder yet. The fastest way to
+> bootstrap is to copy saifdocs's own `docspec/` from this repo and
+> rename `my-product`.
+
+### 3. Compile to a saifctl feature tree
+
+From your project root:
+
+```bash
+saifdocs gen --project-dir .
+```
+
+Saifdocs reads `docspec/`, builds a manifest of every page that needs
+to be written, and emits a timestamped feature dir under
+`<project>/saifctl/features/saifdocs-<timestamp>/`:
 
 ```
 saifctl/features/saifdocs-2026-05-04T10-30-45-123Z/
-  feature.yml
-  plan.md
+  feature.yml          # declares the audit critic
+  plan.md              # run summary (when, what, how)
   critics/
-    audit.md            # documentation-review critic prompt
+    audit.md           # review prompt: omissions, false claims, …
   phases/
-    01-ref-cli-flags/   # one phase per file-to-generate
-      spec.md
+    01-ref-cli-flags/  # one phase per file-to-generate
+      spec.md          # the writing prompt for this page
       tests/
-        gate.sh
+        gate.sh        # checks the page exists and is non-empty
     02-ref-config/
-    ...
+    …
 ```
 
 Phase numbering width is computed from the run's total file count
 (50 pages → `01..50`; 1023 pages → `0001..1023`) so lex ordering matches
-emission order.
+emission order. The dependency chain is preserved: references →
+concepts → how-tos → tutorials → landing-pages.
 
-Then have the consumer repo run:
+### 4. Run it via saifctl
 
 ```bash
 saifctl feat run --feature saifdocs-<timestamp>
 ```
 
-Saifctl drives generation of every doc page, with the audit critic
-reviewing each page after writing.
+Saifctl drives the agent through every phase, with the audit critic
+reviewing each page after writing in fresh LLM context.
 
-### Manifest-only (no feature tree)
+### 5. Read the docs
 
-```bash
-node dist/cli.js gen --project-dir ../.. --dry-run
+When the run finishes, your generated pages land at the paths declared
+in the docspec — typically under `docs/`:
+
+```
+docs/
+  products/my-product/
+    concepts/auth.md
+    how-tos/get-started.md
+    …
+  reference/commands/my-product/
+    run.md
 ```
 
-Writes `docspec/.manifest.json` for staleness tracking; skips the
-feature emission step.
+## Daily workflows
+
+| Command | What it does |
+| --- | --- |
+| `saifdocs gen` | Full compile from scratch — fresh feature dir, every page. |
+| `saifdocs update` | Emit a feature dir containing only stale phases (per `validate`'s rules: any `read` path newer than `generatedAt`). |
+| `saifdocs validate` | Check staleness in CI — no LLM, fast. Exits non-zero if any page is out of date. |
+| `saifdocs audit` | Gap report: expected outputs (per docspec) vs files on disk. Run after `saifctl feat run` to confirm coverage. |
+| `saifdocs review` | Emit a single-phase feature for a persona-simulation review. |
+| `saifdocs clear` | Delete the output directory (default `docs/`). |
+
+The typical loop:
+
+```
+1. edit docspec/                        ← author intent
+2. saifdocs gen --project-dir .         ← emit feature
+3. saifctl feat run --feature <id>      ← generate pages
+4. saifdocs audit                       ← confirm coverage
+5. saifdocs validate                    ← in CI on every PR
+6. saifdocs update --project-dir .      ← regen only stale pages
+```
+
+## Configuration
+
+### Filter what gets compiled
+
+```bash
+saifdocs gen --project-dir . --types references,concepts
+```
+
+Only phases for the named types end up in the emitted feature.
 
 ### Override the feature id (in-place regeneration)
 
-By default each saifdocs run produces a fresh timestamped feature dir,
+By default each `saifdocs gen` emits a fresh timestamped feature dir,
 so multiple runs accumulate side-by-side (good for monthly recurring
 documentation refresh, before/after refactor snapshots, audit trails).
-For in-place regeneration:
+For in-place regen:
 
 ```bash
-node dist/cli.js gen --project-dir ../.. --feature-id saifdocs-monthly
-```
-
-### Filter by output type
-
-```bash
-node dist/cli.js gen --project-dir ../.. --types references
+saifdocs gen --project-dir . --feature-id saifdocs-monthly
 ```
 
 ### Override the saifctl features dir
 
 ```bash
-node dist/cli.js gen --project-dir ../.. --saifctl-features-dir custom/path
+saifdocs gen --project-dir . --saifctl-features-dir custom/path
 ```
+
+### Manifest-only (skip feature emission)
+
+```bash
+saifdocs gen --project-dir . --dry-run
+```
+
+Writes `docspec/.manifest.json` for staleness tracking; doesn't emit a
+feature tree.
 
 ### Export the manifest
 
-Print to stdout:
-
 ```bash
-node dist/cli.js gen --project-dir ../.. --export-manifest
+# to stdout
+saifdocs gen --project-dir . --export-manifest
+
+# to a file
+saifdocs gen --project-dir . --export-manifest-out ./manifest.json
+
+# stdout via the same flag
+saifdocs gen --project-dir . --export-manifest-out stdout
 ```
 
-Or write to a file:
+### Force-regen one specific page
 
 ```bash
-node dist/cli.js gen --project-dir ../.. --export-manifest-out ./manifest.json
-node dist/cli.js gen --project-dir ../.. --export-manifest-out stdout
+saifdocs update --project-dir . --entry concept--my-product--auth
+# or by output-path suffix
+saifdocs update --project-dir . --entry docs/concepts/auth.md
 ```
-
-### Incremental update — emit only stale phases
-
-```bash
-node dist/cli.js update --project-dir ../..
-```
-
-Reads the manifest, finds entries whose `read` paths are newer than the
-last `generatedAt`, and emits a feature tree containing only those
-phases. Use `--entry <id-or-output-suffix>` to force one specific page.
 
 ### Persona-simulation review
 
 Emits a single-phase feature whose deliverable is a markdown review
-report:
+report under `docs/review/<product>/<persona>/`:
 
 ```bash
-node dist/cli.js review \
-  --product cli \
+saifdocs review \
+  --product my-product \
   --persona engineer \
-  --task understand-safety-guarantees \
-  --project-dir ../..
+  --task install \
+  --project-dir .
 ```
 
-### Clear generated docs
+Then `saifctl feat run --feature <id>` to execute the review.
+
+## Development
+
+Working on saifdocs itself (not just using it)?
 
 ```bash
-node dist/cli.js clear
+git clone https://github.com/safe-ai-factory/saifdocs.git
+cd saifdocs
+pnpm install
+pnpm run check    # lint + typecheck + knip + build + test
 ```
 
-### Validate / audit
-
-- `validate` — manifest staleness check (no LLM, fast).
-- `audit` — gap report: expected outputs vs files on disk (no LLM,
-  fast). Run *after* `saifctl feat run` to confirm coverage.
-
-## Layout
-
-- `docspec/` — source of truth (you edit this).
-- `docs/` — default target directory for generated documentation (safe
-  to delete with `clear`).
-
-### Dogfooding in the SaifCTL repo
-
-```bash
-node dist/cli.js gen \
-  --docspec-dir docspec \
-  --output-dir ../../docs \
-  --project-dir ../..
-saifctl feat run --feature saifdocs-<timestamp>
-```
-
-See `../../docs/README.md` for audit, validate, and review examples.
-
-## Commands
-
-| Command | Description |
-| --- | --- |
-| `gen` / `generate` | Resolve docspec → write `docspec/.manifest.json` → emit a saifctl feature tree (run `saifctl feat run --feature <id>` afterwards). Use `--dry-run` to skip the emit step. |
-| `update` | Emit a feature tree containing only stale phases (per validate). Use `--entry` to force a specific page. |
-| `validate` | Check manifest staleness vs docspec (no LLM). |
-| `audit` | Gap report: expected outputs vs files on disk (no LLM). |
-| `review` | Emit a single-phase review feature (`--product`, `--persona`, `--task`). |
-| `clear` | Remove `--output-dir` (default `docs/`). |
+Saifctl is a `devDependency` for the integration tests; saifdocs has
+no runtime dependency on it.
 
 ## License
 
