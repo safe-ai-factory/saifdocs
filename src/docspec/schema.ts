@@ -6,7 +6,7 @@ export const SlugSchema = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
 });
 
 /** Task audience maturity for how-to framing (was `day_n` 0/1/2). */
-export const TaskUserStageSchema = z.enum(['evaluating', 'getting-started', 'established']);
+const TaskUserStageSchema = z.enum(['evaluating', 'getting-started', 'established']);
 
 export const TaskFrontmatterSchema = z.object({
   prereq_concepts: z.array(z.string()).default([]),

@@ -1,5 +1,3 @@
-import type { RunSandboxPassthroughFields } from '../generation/run-sandbox.js';
-
 export type OutputType = 'references' | 'concepts' | 'how-tos' | 'tutorials' | 'landing-pages';
 
 export type ManifestEntry = {
@@ -33,13 +31,6 @@ export type GenSettings = {
   outputDir: string;
   projectDir: string;
   types: OutputType[] | 'all';
-  /** When set, passed as `--cedar` to `saifctl sandbox`. */
-  cedarPolicyPath?: string;
-  saifctlConfig?: string;
-  /** Relative or absolute saifctl config directory (Cosmiconfig `saifctl` module). Default: saifctl */
-  saifctlDir?: string;
-  /** Max inner gate rounds for saifctl sandbox (default: 8). */
-  gateRetries?: number;
-  /** If true, skip invoking saifctl (manifest only). */
+  /** If true, build the manifest only; do not emit a feature tree. */
   dryRun?: boolean;
-} & Partial<RunSandboxPassthroughFields>;
+};

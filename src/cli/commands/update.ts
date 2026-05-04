@@ -1,58 +1,71 @@
 /**
  * `saifdocs update` — incremental regen after docspec (or read-list) changes.
  *
- * Flow: load `.manifest.json` → same staleness rules as `validate` (mtime of any `read` path
- * vs `generatedAt`) → run sandbox only for stale entry ids (`onlyEntryIds`), keeping the full
- * manifest so untouched rows keep their timestamps. Does not rebuild the manifest from docspec;
- * run `gen` when the manifest structure or `read` lists need to change.
+ * Flow: load `.manifest.json` → same staleness rules as `validate` (mtime of
+ * any `read` path vs `generatedAt`) → emit a saifctl feature tree containing
+ * **only** the stale phases (so `saifctl feat run` regenerates just those).
+ * Does not rebuild the manifest from docspec; run `gen` when the manifest
+ * structure or `read` lists need to change.
+ *
+ * Saifdocs no longer orchestrates the regen run itself — the user runs
+ * `saifctl feat run --feature <id>` after this command emits the feature.
  */
 import { resolve } from 'node:path';
 
-import { sandboxPassthroughArgs } from '@safe-ai-factory/saifctl';
 import { defineCommand } from 'citty';
 
-import { DEFAULT_GATE_RETRIES } from '../../constants.js';
 import { consola } from '../../logger.js';
 import {
   allowMissingManifestArg,
   cliBooleanTrue,
   docspecDirArg,
   dryRunArg,
+  entryArg,
+  featureIdArg,
   outputDirArg,
   parseOutputTypes,
   projectDirArg,
-  saifctlConfigArg,
-  saifctlDirArg,
+  saifctlFeaturesDirArg,
   typesArg,
 } from '../args.js';
-import { readSandboxPassthroughFromCittyArgs } from '../sandbox.js';
 import { runUpdateCore } from '../update-core.js';
 
 const updateCommand = defineCommand({
   meta: {
     name: 'update',
     description:
-      'Regenerate manifest entries that are stale per validate (newer inputs, missing output, or never generated)',
+      'Emit a saifctl feature tree containing only the stale entries (per validate). Use --entry to force one page. Run `saifctl feat run --feature <id>` afterwards.',
   },
   args: {
     'docspec-dir': docspecDirArg,
     'output-dir': outputDirArg,
     'project-dir': projectDirArg,
+    'saifctl-features-dir': saifctlFeaturesDirArg,
+    'feature-id': featureIdArg,
+    entry: entryArg,
     types: typesArg,
-    'saifctl-config': saifctlConfigArg,
-    'saifctl-dir': saifctlDirArg,
     'dry-run': dryRunArg,
     'allow-missing-manifest': allowMissingManifestArg,
-    ...sandboxPassthroughArgs,
   },
   async run({ args }) {
     const cwd = process.cwd();
-    // Paths must match what was used for `gen` so manifest `read`/`output` and extract prefix align.
+    // Paths must match what was used for `gen` so manifest `read`/`output`
+    // paths still resolve correctly for staleness checks.
     const docspecDir = resolve(cwd, args['docspec-dir'] ?? 'docspec');
     const outputDir = resolve(cwd, args['output-dir'] ?? 'docs');
     const projectDir = resolve(cwd, args['project-dir'] ?? '.');
+    const saifctlFeaturesDir = resolve(
+      cwd,
+      typeof args['saifctl-features-dir'] === 'string' && args['saifctl-features-dir'].length > 0
+        ? args['saifctl-features-dir']
+        : resolve(projectDir, 'saifctl', 'features'),
+    );
+    const featureIdOverride =
+      typeof args['feature-id'] === 'string' && args['feature-id'].length > 0
+        ? args['feature-id']
+        : undefined;
 
-    // Mirrors `gen --types`; limits which manifest rows are checked for staleness and regen.
+    // Mirrors `gen --types`; limits which manifest rows are checked for staleness.
     let types;
     try {
       types = parseOutputTypes(args.types);
@@ -61,34 +74,29 @@ const updateCommand = defineCommand({
       process.exit(1);
     }
 
-    // String passed through; `runUpdateCore` validates (only after stale + non–dry-run).
-    const gateRetriesRaw =
-      typeof args['gate-retries'] === 'string'
-        ? args['gate-retries'].trim()
-        : String(DEFAULT_GATE_RETRIES);
-    const sandboxPassthrough = readSandboxPassthroughFromCittyArgs(args as Record<string, unknown>);
+    const entryRaw = args.entry;
+    const entry =
+      typeof entryRaw === 'string' && entryRaw.trim() !== '' ? entryRaw.trim() : undefined;
 
     const result = await runUpdateCore({
       docspecDir,
       outputDir,
       projectDir,
+      saifctlFeaturesDir,
       types,
+      ...(featureIdOverride ? { featureId: featureIdOverride } : {}),
+      ...(entry ? { entry } : {}),
       dryRun: cliBooleanTrue(args as Record<string, unknown>, 'dry-run', 'dryRun'),
       allowMissingManifest: cliBooleanTrue(
         args as Record<string, unknown>,
         'allow-missing-manifest',
         'allowMissingManifest',
       ),
-      gateRetries: gateRetriesRaw,
-      saifctlConfig:
-        typeof args['saifctl-config'] === 'string' ? args['saifctl-config'] : undefined,
-      saifctlDir: typeof args['saifctl-dir'] === 'string' ? args['saifctl-dir'] : 'saifctl',
-      sandboxPassthrough,
-      // Log before sandbox work starts; `generateEntries` already logs per entry.
-      onRegenerating: (n) => consola.info(`[update] Regenerating ${n} stale page(s)…`),
+      // Log before compile starts.
+      onRegenerating: (n) => consola.info(`[update] Emitting feature for ${n} stale page(s)…`),
     });
 
-    // Exit codes: 0 ok, 1 user/config or sandbox failure, 2 manifest missing or unreadable.
+    // Exit codes: 0 ok, 1 user/config or compile failure, 2 manifest missing or unreadable.
     switch (result.kind) {
       case 'read-manifest-failed':
         consola.error(result.message);
@@ -107,7 +115,7 @@ const updateCommand = defineCommand({
         process.exit(0);
         break;
       case 'dry-run':
-        consola.info(`[update] Dry run: would regenerate ${result.stale.length} page(s):`);
+        consola.info(`[update] Dry run: would emit feature for ${result.stale.length} page(s):`);
         for (const s of result.stale) {
           consola.info(`  - ${s.id}`);
           for (const p of s.staleInputs) {
@@ -116,16 +124,36 @@ const updateCommand = defineCommand({
         }
         process.exit(0);
         break;
-      case 'invalid-gate-retries':
-        consola.error(`Invalid --gate-retries: ${result.raw} (expected positive integer)`);
+      case 'compile-failed':
+        consola.error(`[update] Compile failed: ${result.message}`);
         process.exit(1);
         break;
-      case 'generate-failed':
-        // Errors already logged inside `generateEntries` / sandbox.
+      case 'entry-not-found':
+        consola.error(
+          `[update] No manifest entry matches --entry ${JSON.stringify(result.selector)} (use manifest id or a unique suffix of the output path).`,
+        );
+        process.exit(1);
+        break;
+      case 'entry-ambiguous':
+        consola.error(
+          `[update] --entry ${JSON.stringify(result.selector)} matches multiple outputs; use a longer path suffix or the manifest id:`,
+        );
+        for (const id of result.candidates) {
+          consola.error(`  - ${id}`);
+        }
+        process.exit(1);
+        break;
+      case 'entry-excluded-by-types':
+        consola.error(
+          `[update] --entry ${JSON.stringify(result.entryId)} has type "${result.entryType}" but --types is ${result.types.join(',')} (use "all" or include "${result.entryType}").`,
+        );
         process.exit(1);
         break;
       case 'success':
-        consola.success(`[update] Done. ${result.summary.succeeded} page(s) regenerated.`);
+        consola.success(
+          `[update] Emitted feature: ${result.result.featureId} (${result.result.phases.length} phase(s)) at ${result.result.featureDir}`,
+        );
+        consola.info(`[update] Next step: saifctl feat run --feature ${result.result.featureId}`);
         process.exit(0);
         break;
       default: {

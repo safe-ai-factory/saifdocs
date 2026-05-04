@@ -1,6 +1,6 @@
 ---
 prereq_concepts:
-  - docspec-tree
+  - docspec
   - generation-pipeline
 arrival_context: docs-link
 search_terms:

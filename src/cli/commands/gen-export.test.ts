@@ -7,15 +7,14 @@ import { parseArgs } from 'citty';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MANIFEST_VERSION } from '../../constants.js';
-import type { ManifestDocument } from '../../manifest/types.js';
 import genCommand from './gen.js';
 
 const hoisted = vi.hoisted(() => ({
-  generateEntries: vi.fn(),
+  compileManifestToFeatureTree: vi.fn(),
 }));
 
-vi.mock('../../generation/generate.js', () => ({
-  generateEntries: hoisted.generateEntries,
+vi.mock('../../features/compiler.js', () => ({
+  compileManifestToFeatureTree: hoisted.compileManifestToFeatureTree,
 }));
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -59,7 +58,15 @@ describe('CLI gen export manifest', () => {
 
   beforeEach(() => {
     exitCtx = installExitMock();
-    hoisted.generateEntries.mockReset();
+    hoisted.compileManifestToFeatureTree.mockReset();
+    // Default: compiler succeeds with an empty result (we're testing the export path).
+    hoisted.compileManifestToFeatureTree.mockResolvedValue({
+      featureId: 'saifdocs-test',
+      featureDir: '/tmp/saifdocs-test',
+      featureDirRel: 'saifctl/features/saifdocs-test',
+      phases: [],
+      byType: {},
+    });
   });
 
   afterEach(() => {
@@ -72,26 +79,6 @@ describe('CLI gen export manifest', () => {
       const docs = join(base, 'docspec');
       await cp(minimalDocspec, docs, { recursive: true });
 
-      const afterGen: ManifestDocument = {
-        version: MANIFEST_VERSION,
-        createdAt: '2024-01-01T00:00:00.000Z',
-        docspecDir: docs,
-        outputDir: join(base, 'out'),
-        projectDir: minimalProject,
-        entries: [],
-      };
-
-      hoisted.generateEntries.mockResolvedValue({
-        summary: {
-          attempted: 0,
-          succeeded: 0,
-          failed: 0,
-          skipped: 0,
-          failures: [],
-        },
-        manifest: afterGen,
-      });
-
       const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
       await genCommand.run!(
@@ -102,6 +89,8 @@ describe('CLI gen export manifest', () => {
           join(base, 'out'),
           '--project-dir',
           minimalProject,
+          '--saifctl-features-dir',
+          join(base, 'saifctl', 'features'),
           '--export-manifest',
         ]),
       );
@@ -109,7 +98,7 @@ describe('CLI gen export manifest', () => {
       expect(exitCtx.exitCodes).toHaveLength(0);
       const written = stdoutSpy.mock.calls.map((c) => String(c[0])).join('');
       expect(JSON.parse(written).version).toBe(MANIFEST_VERSION);
-      expect(JSON.parse(written).entries).toEqual([]);
+      expect(Array.isArray(JSON.parse(written).entries)).toBe(true);
       stdoutSpy.mockRestore();
     } finally {
       await rm(base, { recursive: true, force: true });
@@ -123,40 +112,6 @@ describe('CLI gen export manifest', () => {
       await cp(minimalDocspec, docs, { recursive: true });
       const exportPath = join(base, 'exported-manifest.json');
 
-      const afterGen: ManifestDocument = {
-        version: MANIFEST_VERSION,
-        createdAt: '2024-06-01T00:00:00.000Z',
-        docspecDir: docs,
-        outputDir: join(base, 'out'),
-        projectDir: minimalProject,
-        entries: [
-          {
-            id: 'x',
-            type: 'references' as const,
-            output: '/o',
-            read: [],
-            productId: null,
-            personaId: null,
-            taskIds: [],
-            conceptId: null,
-            tutorialPosition: null,
-            tutorialThreadLength: null,
-            generatedAt: null,
-          },
-        ],
-      };
-
-      hoisted.generateEntries.mockResolvedValue({
-        summary: {
-          attempted: 1,
-          succeeded: 1,
-          failed: 0,
-          skipped: 0,
-          failures: [],
-        },
-        manifest: afterGen,
-      });
-
       await genCommand.run!(
         ctxArgv(genCommand, [
           '--docspec-dir',
@@ -165,6 +120,8 @@ describe('CLI gen export manifest', () => {
           join(base, 'out'),
           '--project-dir',
           minimalProject,
+          '--saifctl-features-dir',
+          join(base, 'saifctl', 'features'),
           '--export-manifest-out',
           exportPath,
         ]),
@@ -172,7 +129,35 @@ describe('CLI gen export manifest', () => {
 
       expect(exitCtx.exitCodes).toHaveLength(0);
       const raw = await readFile(exportPath, 'utf8');
-      expect(JSON.parse(raw).entries[0]?.id).toBe('x');
+      const parsed = JSON.parse(raw);
+      expect(parsed.version).toBe(MANIFEST_VERSION);
+      expect(Array.isArray(parsed.entries)).toBe(true);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it('exits 1 when the compiler throws', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-gen-export-err-'));
+    try {
+      const docs = join(base, 'docspec');
+      await cp(minimalDocspec, docs, { recursive: true });
+      hoisted.compileManifestToFeatureTree.mockRejectedValueOnce(new Error('boom'));
+
+      await expect(
+        genCommand.run!(
+          ctxArgv(genCommand, [
+            '--docspec-dir',
+            docs,
+            '--output-dir',
+            join(base, 'out'),
+            '--project-dir',
+            minimalProject,
+            '--saifctl-features-dir',
+            join(base, 'saifctl', 'features'),
+          ]),
+        ),
+      ).rejects.toMatchObject({ exitCode: 1 });
     } finally {
       await rm(base, { recursive: true, force: true });
     }

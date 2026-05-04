@@ -1,6 +1,6 @@
 ---
 prereq_concepts:
-  - docspec-tree
+  - docspec
   - manifest-build-plan
 arrival_context: readme
 search_terms:

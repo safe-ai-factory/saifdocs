@@ -3,7 +3,7 @@ import type { AuditResult } from './audit.js';
 const SECTION: Record<string, string> = {
   'missing-reference': 'Missing references',
   'missing-concept': 'Missing concepts',
-  'missing-how-to': 'Missing how-tos',
+  'missing-how-to': "Missing how-to's",
   'missing-tutorial': 'Missing tutorials',
   'missing-landing': 'Missing product landing pages',
   'missing-prereq-concept': 'Missing prerequisite concepts (from tasks)',

@@ -30,7 +30,7 @@ describe('renderAuditReport', () => {
       },
       '2026-01-01T00:00:00.000Z',
     );
-    expect(md).toContain('Missing how-tos');
+    expect(md).toContain("Missing how-to's");
     expect(md).toContain('Missing references');
     expect(md).toContain('h1');
   });

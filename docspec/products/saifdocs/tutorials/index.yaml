@@ -1,0 +1,12 @@
+- id: overview
+  order: 1
+  prereq_id: null
+- id: installation
+  order: 2
+  prereq_id: overview
+- id: docspec-to-docs
+  order: 3
+  prereq_id: installation
+- id: ci-docs-pipeline
+  order: 4
+  prereq_id: docspec-to-docs

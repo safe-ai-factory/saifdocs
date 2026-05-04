@@ -9,3 +9,6 @@ docspec/.manifest.json
 
 # saifctl run artifacts (can be very large; not part of source)
 .saifctl/
+
+# Test fixture pollution: never commit feature dirs emitted INTO the fixture project
+src/manifest/__fixtures__/**/saifctl/

@@ -1,12 +1,24 @@
+/**
+ * `saifdocs gen` — emit a saifctl feature tree from docspec.
+ *
+ * Saifdocs is a *compiler*, not an orchestrator. This command:
+ *   1. Reads docspec → builds manifest
+ *   2. Writes the manifest to `<docspec>/.manifest.json` (staleness tracking)
+ *   3. Emits a saifctl feature tree under `<saifctl-features-dir>/<feature-id>/`
+ *      with one phase per file-to-generate.
+ *   4. Exits. The user (or CI) runs `saifctl feat run --feature <id>` next.
+ *
+ * Saifdocs no longer spawns `saifctl sandbox` itself; saifctl is at most a
+ * dev-dep (for integration tests). Cedar policy, agent profile, model
+ * selection — all decided by the consumer repo, not saifdocs.
+ */
 import { resolve } from 'node:path';
 
-import { sandboxPassthroughArgs } from '@safe-ai-factory/saifctl';
 import { defineCommand } from 'citty';
 
-import { DEFAULT_GATE_RETRIES } from '../../constants.js';
 import { DocspecError } from '../../docspec/errors.js';
 import { readDocspec } from '../../docspec/reader.js';
-import { generateEntries } from '../../generation/generate.js';
+import { compileManifestToFeatureTree } from '../../features/compiler.js';
 import { consola } from '../../logger.js';
 import { buildManifest } from '../../manifest/builder.js';
 import type { GenSettings } from '../../manifest/types.js';
@@ -16,39 +28,47 @@ import {
   dryRunArg,
   exportManifestOutArg,
   exportManifestStdoutArg,
+  featureIdArg,
   outputDirArg,
   parseOutputTypes,
   projectDirArg,
   resolveExportManifestOutPath,
-  saifctlConfigArg,
-  saifctlDirArg,
+  saifctlFeaturesDirArg,
   typesArg,
 } from '../args.js';
-import { readSandboxPassthroughFromCittyArgs } from '../sandbox.js';
 
 const genCommand = defineCommand({
   meta: {
     name: 'gen',
     description:
-      'Resolve docspec, write manifest, and generate docs (references, concepts, how-tos, tutorials, landing-pages via saifctl sandbox)',
+      'Compile docspec into a saifctl feature tree. Run `saifctl feat run --feature <id>` afterwards to generate the docs.',
   },
   args: {
     'docspec-dir': docspecDirArg,
     'output-dir': outputDirArg,
     'project-dir': projectDirArg,
+    'saifctl-features-dir': saifctlFeaturesDirArg,
+    'feature-id': featureIdArg,
     types: typesArg,
     'export-manifest': exportManifestStdoutArg,
     'export-manifest-out': exportManifestOutArg,
-    'saifctl-config': saifctlConfigArg,
-    'saifctl-dir': saifctlDirArg,
     'dry-run': dryRunArg,
-    ...sandboxPassthroughArgs,
   },
   async run({ args }) {
     const cwd = process.cwd();
     const docspecDir = resolve(cwd, args['docspec-dir'] ?? 'docspec');
     const outputDir = resolve(cwd, args['output-dir'] ?? 'docs');
     const projectDir = resolve(cwd, args['project-dir'] ?? '.');
+    const saifctlFeaturesDir = resolve(
+      cwd,
+      typeof args['saifctl-features-dir'] === 'string' && args['saifctl-features-dir'].length > 0
+        ? args['saifctl-features-dir']
+        : resolve(projectDir, 'saifctl', 'features'),
+    );
+    const featureIdOverride =
+      typeof args['feature-id'] === 'string' && args['feature-id'].length > 0
+        ? args['feature-id']
+        : undefined;
 
     let types;
     try {
@@ -63,28 +83,12 @@ const genCommand = defineCommand({
       typeof args['export-manifest-out'] === 'string' ? args['export-manifest-out'] : undefined,
     );
 
-    const gateRetriesRaw =
-      typeof args['gate-retries'] === 'string'
-        ? args['gate-retries'].trim()
-        : String(DEFAULT_GATE_RETRIES);
-    const sandboxPassthrough = readSandboxPassthroughFromCittyArgs(args as Record<string, unknown>);
-    const gateRetriesParsed = parseInt(gateRetriesRaw, 10);
-    if (Number.isNaN(gateRetriesParsed) || gateRetriesParsed < 1) {
-      consola.error(`Invalid --gate-retries: ${gateRetriesRaw} (expected positive integer)`);
-      process.exit(1);
-    }
-
     const settings: GenSettings = {
       docspecDir,
       outputDir,
       projectDir,
       types,
-      saifctlConfig:
-        typeof args['saifctl-config'] === 'string' ? args['saifctl-config'] : undefined,
-      saifctlDir: typeof args['saifctl-dir'] === 'string' ? args['saifctl-dir'] : 'saifctl',
-      gateRetries: gateRetriesParsed,
       dryRun: args['dry-run'] === true,
-      ...sandboxPassthrough,
     };
 
     let manifest;
@@ -102,19 +106,35 @@ const genCommand = defineCommand({
     const written = await writeManifestToDocspec(docspecDir, manifest);
     consola.success(`Wrote manifest: ${written}`);
 
-    const { summary, manifest: manifestAfterGen } = await generateEntries(manifest, settings);
-    if (summary.failed > 0) {
-      process.exit(1);
+    if (settings.dryRun) {
+      consola.info('[gen] Dry run: would emit feature tree (skipped).');
+    } else {
+      try {
+        const result = await compileManifestToFeatureTree({
+          manifest,
+          saifctlFeaturesDir,
+          projectDir,
+          types,
+          ...(featureIdOverride ? { featureId: featureIdOverride } : {}),
+        });
+        consola.success(
+          `[gen] Emitted feature: ${result.featureId} (${result.phases.length} phase(s)) at ${result.featureDir}`,
+        );
+        consola.info(`[gen] Next step: saifctl feat run --feature ${result.featureId}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        consola.error(`[gen] Compile failed: ${msg}`);
+        process.exit(1);
+      }
     }
 
-    const serialized = serializeManifest(manifestAfterGen);
     if (exportStdout || exportOut === 'stdout') {
-      process.stdout.write(serialized);
+      process.stdout.write(serializeManifest(manifest));
     }
     if (typeof exportOut === 'string' && exportOut !== 'stdout') {
       const { writeFile } = await import('node:fs/promises');
       const outPath = resolve(cwd, exportOut);
-      await writeFile(outPath, serialized, 'utf8');
+      await writeFile(outPath, serializeManifest(manifest), 'utf8');
       consola.success(`Exported manifest: ${outPath}`);
     }
   },

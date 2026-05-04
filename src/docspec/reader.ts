@@ -131,7 +131,7 @@ async function resolveTutorialsIndexPath(tutorialsDir: string): Promise<string |
   return null;
 }
 
-export async function readHowTosDir(howTosDir: string): Promise<HowToIntent[]> {
+async function readHowTosDir(howTosDir: string): Promise<HowToIntent[]> {
   const byId = new Map<string, HowToIntent>();
   for (const name of await readdir(howTosDir)) {
     if (!name.endsWith('.md')) continue;
@@ -172,7 +172,7 @@ type Row = {
   absolutePath: string;
 };
 
-export async function readTutorialsDir(
+async function readTutorialsDir(
   tutorialsDir: string,
 ): Promise<{ intents: TutorialIntent[]; orderPath: string | null }> {
   // Collect one intent per tutorial .md (id from frontmatter or slugified filename).

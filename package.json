@@ -46,9 +46,7 @@
     "saifdocs": "dist/cli.js"
   },
   "files": [
-    "dist",
-    "review.cedar",
-    "review-strict.cedar"
+    "dist"
   ],
   "scripts": {
     "build": "tsup",
@@ -65,7 +63,6 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@safe-ai-factory/saifctl": "link:../..",
     "citty": "^0.2.1",
     "consola": "^3.4.2",
     "gray-matter": "^4.0.3",
@@ -74,6 +71,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9",
+    "@safe-ai-factory/saifctl": "link:../..",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25",
     "@vitest/coverage-v8": "^2.1.9",

@@ -1,6 +1,6 @@
 ---
 prereq_concepts:
-  - docspec-tree
+  - docspec
 arrival_context: error-message
 search_terms:
   - saifdocs audit missing pages

@@ -39,20 +39,27 @@ export const exportManifestOutArg = {
   description: 'Export manifest JSON to this file path, or "stdout" / "-" for stdout',
 };
 
-export const saifctlConfigArg = {
+/**
+ * Path to the consumer repo's saifctl features dir. Saifdocs writes the
+ * compiled feature tree under here. Default: `<projectDir>/saifctl/features`.
+ */
+export const saifctlFeaturesDirArg = {
   type: 'string' as const,
-  description: 'Path to saifctl configuration file',
+  description: 'Path to consumer saifctl features dir (default: <project-dir>/saifctl/features)',
 };
 
-export const saifctlDirArg = {
+/**
+ * Override the default timestamped feature id (e.g. for in-place regeneration).
+ */
+export const featureIdArg = {
   type: 'string' as const,
-  description: 'Path to saifctl config directory (Cosmiconfig module root; default: saifctl)',
-  default: 'saifctl',
+  description:
+    'Override the default timestamped feature id (e.g. "saifdocs-monthly"); regen overwrites if dir exists',
 };
 
 export const dryRunArg = {
   type: 'boolean' as const,
-  description: 'Resolve manifest only; do not invoke saifctl sandbox',
+  description: 'Resolve manifest only; do not emit a feature tree',
   default: false,
 };
 
@@ -60,6 +67,13 @@ export const allowMissingManifestArg = {
   type: 'boolean' as const,
   description: 'If no docspec/.manifest.json exists, exit successfully instead of failing',
   default: false,
+};
+
+/** Regenerate one manifest row by id or by a suffix of its output path (see update --entry). */
+export const entryArg = {
+  type: 'string' as const,
+  description:
+    'Regenerate only this entry: manifest id (e.g. concept--saifdocs--docspec) or relative output path suffix (e.g. products/foo/concepts/bar.md). Ignores staleness for that row.',
 };
 
 export const jsonOutputArg = {

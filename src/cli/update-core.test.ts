@@ -1,508 +1,531 @@
-import { mkdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MANIFEST_FILENAME, MANIFEST_VERSION } from '../constants.js';
-import { generateEntries } from '../generation/generate.js';
-import type { ManifestDocument, ManifestEntry } from '../manifest/types.js';
-import { runUpdateCore } from './update-core.js';
+import { MANIFEST_VERSION } from '../constants.js';
+import {
+  compileManifestToFeatureTree,
+  type CompileToFeatureTreeResult,
+} from '../features/compiler.js';
+import type { ManifestDocument } from '../manifest/types.js';
+import { resolveUpdateEntrySelector, runUpdateCore } from './update-core.js';
 
-describe('runUpdateCore', () => {
-  const base = join(tmpdir(), `saifdocs-update-core-${process.pid}`);
+describe('resolveUpdateEntrySelector', () => {
+  const manifest: ManifestDocument = {
+    version: MANIFEST_VERSION,
+    createdAt: 't',
+    docspecDir: 'd',
+    outputDir: 'o',
+    projectDir: 'p',
+    entries: [
+      {
+        id: 'reference--cli',
+        type: 'references',
+        output: '/tmp/docs/references/cli.md',
+        read: [],
+        productId: null,
+        personaId: null,
+        taskIds: [],
+        conceptId: null,
+        tutorialPosition: null,
+        tutorialThreadLength: null,
+        generatedAt: null,
+      },
+      {
+        id: 'concept--auth',
+        type: 'concepts',
+        output: '/tmp/docs/concepts/auth.md',
+        read: [],
+        productId: null,
+        personaId: null,
+        taskIds: [],
+        conceptId: 'auth',
+        tutorialPosition: null,
+        tutorialThreadLength: null,
+        generatedAt: null,
+      },
+    ],
+  };
 
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await rm(base, { recursive: true, force: true }).catch(() => {});
+  it('matches manifest id exactly', () => {
+    expect(resolveUpdateEntrySelector(manifest, 'reference--cli')).toEqual({
+      kind: 'ok',
+      id: 'reference--cli',
+    });
   });
 
-  function entry(
-    partial: Partial<ManifestEntry> & Pick<ManifestEntry, 'id' | 'type'>,
-  ): ManifestEntry {
+  it('matches unique output path suffix', () => {
+    expect(resolveUpdateEntrySelector(manifest, 'docs/references/cli.md')).toEqual({
+      kind: 'ok',
+      id: 'reference--cli',
+    });
+    expect(resolveUpdateEntrySelector(manifest, 'cli.md')).toEqual({
+      kind: 'ok',
+      id: 'reference--cli',
+    });
+  });
+
+  it('returns not-found when no match', () => {
+    expect(resolveUpdateEntrySelector(manifest, 'no-such')).toEqual({ kind: 'not-found' });
+  });
+
+  it('returns ambiguous when suffix matches multiple outputs', () => {
+    const ambiguousManifest: ManifestDocument = {
+      ...manifest,
+      entries: [
+        ...manifest.entries,
+        {
+          id: 'reference--other',
+          type: 'references',
+          output: '/somewhere/else/cli.md',
+          read: [],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null,
+        },
+      ],
+    };
+    expect(resolveUpdateEntrySelector(ambiguousManifest, 'cli.md')).toMatchObject({
+      kind: 'ambiguous',
+    });
+  });
+});
+
+describe('runUpdateCore', () => {
+  let tmpRoot: string;
+  let projectDir: string;
+  let docspecDir: string;
+  let outputDir: string;
+  let saifctlFeaturesDir: string;
+
+  beforeEach(async () => {
+    tmpRoot = await mkdtemp(join(tmpdir(), 'saifdocs-update-core-'));
+    projectDir = join(tmpRoot, 'project');
+    docspecDir = join(projectDir, 'docspec');
+    outputDir = join(projectDir, 'docs');
+    saifctlFeaturesDir = join(projectDir, 'saifctl', 'features');
+    await mkdir(projectDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  function makeBaseInput(overrides: Partial<Parameters<typeof runUpdateCore>[0]> = {}) {
     return {
-      id: partial.id,
-      type: partial.type,
-      output: partial.output ?? join(base, 'out.md'),
-      read: partial.read ?? [],
-      productId: partial.productId ?? null,
-      personaId: partial.personaId ?? null,
-      taskIds: partial.taskIds ?? [],
-      conceptId: partial.conceptId ?? null,
-      tutorialPosition: partial.tutorialPosition ?? null,
-      tutorialThreadLength: partial.tutorialThreadLength ?? null,
-      generatedAt: partial.generatedAt ?? null,
+      docspecDir,
+      outputDir,
+      projectDir,
+      saifctlFeaturesDir,
+      types: 'all' as const,
+      dryRun: false,
+      allowMissingManifest: false,
+      ...overrides,
     };
   }
 
-  async function writeManifest(dir: string, doc: ManifestDocument): Promise<void> {
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, MANIFEST_FILENAME), `${JSON.stringify(doc, null, 2)}\n`, 'utf8');
+  function fakeCompileResult(featureId = 'saifdocs-test'): CompileToFeatureTreeResult {
+    return {
+      featureId,
+      featureDir: join(saifctlFeaturesDir, featureId),
+      featureDirRel: `saifctl/features/${featureId}`,
+      phases: [],
+      byType: {},
+    };
+  }
+
+  async function writeReadFile(path: string, when: Date): Promise<void> {
+    await mkdir(join(path, '..'), { recursive: true });
+    await writeFile(path, 'src', 'utf8');
+    await utimes(path, when, when);
   }
 
   it('returns missing-manifest-skipped when no manifest and allowMissingManifest', async () => {
-    const dir = join(base, 'skip-missing');
-    await mkdir(dir, { recursive: true });
-    const r = await runUpdateCore({
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
-      types: 'all',
-      dryRun: false,
-      allowMissingManifest: true,
-      gateRetries: 8,
+    const r = await runUpdateCore(makeBaseInput({ allowMissingManifest: true }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(null),
+      compileManifestToFeatureTree:
+        compileManifestToFeatureTree as unknown as typeof compileManifestToFeatureTree,
     });
     expect(r).toEqual({ code: 0, kind: 'missing-manifest-skipped' });
   });
 
   it('returns missing-manifest-error when no manifest', async () => {
-    const dir = join(base, 'err-missing');
-    await mkdir(dir, { recursive: true });
-    const r = await runUpdateCore({
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
-      types: 'all',
-      dryRun: false,
-      allowMissingManifest: false,
-      gateRetries: 8,
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(null),
+      compileManifestToFeatureTree:
+        compileManifestToFeatureTree as unknown as typeof compileManifestToFeatureTree,
     });
     expect(r).toEqual({ code: 2, kind: 'missing-manifest-error' });
   });
 
   it('returns read-manifest-failed when reader throws', async () => {
-    const r = await runUpdateCore(
-      {
-        docspecDir: join(base, 'x'),
-        outputDir: join(base, 'docs'),
-        projectDir: base,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 8,
-      },
-      {
-        readManifestFromDocspec: async () => {
-          throw new Error('boom');
-        },
-        generateEntries,
-      },
-    );
-    expect(r).toMatchObject({ code: 2, kind: 'read-manifest-failed', message: 'boom' });
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockRejectedValue(new Error('disk-go-boom')),
+      compileManifestToFeatureTree:
+        compileManifestToFeatureTree as unknown as typeof compileManifestToFeatureTree,
+    });
+    expect(r).toMatchObject({ code: 2, kind: 'read-manifest-failed', message: 'disk-go-boom' });
   });
 
   it('returns nothing-to-update when no stale entries', async () => {
-    const dir = join(base, 'fresh');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const old = new Date('2020-01-01T00:00:00.000Z');
-    await utimes(inputPath, old, old);
-    const outputPath = join(base, 'out.md');
-    await writeFile(outputPath, 'generated', 'utf8');
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-01-01T00:00:00.000Z'));
+    const outputPath = join(outputDir, 'references', 'cli.md');
+    await mkdir(join(outputPath, '..'), { recursive: true });
+    await writeFile(outputPath, 'doc', 'utf8');
+    await utimes(
+      outputPath,
+      new Date('2024-06-01T00:00:00.000Z'),
+      new Date('2024-06-01T00:00:00.000Z'),
+    );
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
       entries: [
-        entry({
-          id: 'ref1',
+        {
+          id: 'r',
           type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
-      ],
-    };
-    await writeManifest(dir, manifest);
-
-    const gen = vi.fn();
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 8,
-      },
-      {
-        readManifestFromDocspec: async (d) => {
-          expect(d).toBe(dir);
-          return manifest;
+          output: outputPath,
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: '2024-06-01T00:00:00.000Z',
         },
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
+      ],
+    };
+
+    const compile = vi.fn();
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
+    });
     expect(r).toEqual({ code: 0, kind: 'nothing-to-update' });
-    expect(gen).not.toHaveBeenCalled();
+    expect(compile).not.toHaveBeenCalled();
   });
 
-  it('calls generateEntries when entry has generatedAt null', async () => {
-    const dir = join(base, 'null-generated-at');
-    await mkdir(dir, { recursive: true });
+  it('calls compiler when entry has generatedAt null', async () => {
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-06-01T00:00:00.000Z'));
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
-      entries: [entry({ id: 'ref1', type: 'references', generatedAt: null })],
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
+      entries: [
+        {
+          id: 'r',
+          type: 'references',
+          output: join(outputDir, 'r.md'),
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null, // never generated
+        },
+      ],
     };
-    await writeManifest(dir, manifest);
 
-    const gen = vi.fn().mockResolvedValue({
-      summary: { attempted: 1, succeeded: 1, failed: 0, skipped: 0, failures: [] },
-      manifest,
+    const compile = vi.fn().mockResolvedValue(fakeCompileResult());
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
     });
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 2,
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r.kind).toBe('success');
-    expect(gen).toHaveBeenCalledTimes(1);
-    const only = gen.mock.calls[0]![2]?.onlyEntryIds;
-    expect(only?.has('ref1')).toBe(true);
+    expect(r).toMatchObject({ code: 0, kind: 'success' });
+    expect(compile).toHaveBeenCalledTimes(1);
+    const callArg = compile.mock.calls[0]![0];
+    expect(callArg.onlyEntryIds).toBeInstanceOf(Set);
+    expect([...(callArg.onlyEntryIds as Set<string>)]).toEqual(['r']);
   });
 
-  it('returns dry-run with stale list and does not call generateEntries', async () => {
-    const dir = join(base, 'dry');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const future = new Date('2030-01-01T00:00:00.000Z');
-    await utimes(inputPath, future, future);
+  it('returns dry-run with stale list and does not call compiler', async () => {
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-06-01T00:00:00.000Z'));
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
       entries: [
-        entry({
-          id: 'ref1',
+        {
+          id: 'r',
           type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
-      ],
-    };
-    await writeManifest(dir, manifest);
-
-    const gen = vi.fn();
-    const onRegenerating = vi.fn();
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: true,
-        allowMissingManifest: false,
-        gateRetries: 8,
-        onRegenerating,
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r.kind).toBe('dry-run');
-    if (r.kind !== 'dry-run') throw new Error('expected dry-run');
-    expect(r.stale).toHaveLength(1);
-    expect(r.stale[0]!.id).toBe('ref1');
-    expect(r.stale[0]!.staleInputs).toContain(inputPath);
-    expect(gen).not.toHaveBeenCalled();
-    expect(onRegenerating).not.toHaveBeenCalled();
-  });
-
-  it('returns invalid-gate-retries when gate retries invalid', async () => {
-    const dir = join(base, 'bad-gate');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const future = new Date('2030-01-01T00:00:00.000Z');
-    await utimes(inputPath, future, future);
-
-    const manifest: ManifestDocument = {
-      version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
-      entries: [
-        entry({
-          id: 'ref1',
-          type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
+          output: join(outputDir, 'r.md'),
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null,
+        },
       ],
     };
 
-    const gen = vi.fn();
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: '0',
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r).toMatchObject({ code: 1, kind: 'invalid-gate-retries', raw: '0' });
-    expect(gen).not.toHaveBeenCalled();
-  });
-
-  it('calls generateEntries with onlyEntryIds for stale rows', async () => {
-    const dir = join(base, 'regen');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const future = new Date('2030-01-01T00:00:00.000Z');
-    await utimes(inputPath, future, future);
-
-    const manifest: ManifestDocument = {
-      version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
-      entries: [
-        entry({
-          id: 'ref1',
-          type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
-        entry({
-          id: 'ref2',
-          type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
-      ],
-    };
-
-    const gen = vi.fn().mockResolvedValue({
-      summary: { attempted: 2, succeeded: 2, failed: 0, skipped: 0, failures: [] },
-      manifest,
+    const compile = vi.fn();
+    const r = await runUpdateCore(makeBaseInput({ dryRun: true }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
     });
-
-    const onRegenerating = vi.fn();
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 2,
-        onRegenerating,
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r.kind).toBe('success');
-    expect(onRegenerating).toHaveBeenCalledWith(2);
-    expect(gen).toHaveBeenCalledTimes(1);
-    const opts = gen.mock.calls[0]![2];
-    expect(opts?.onlyEntryIds).toBeInstanceOf(Set);
-    expect(opts?.onlyEntryIds?.size).toBe(2);
-    expect(opts?.onlyEntryIds?.has('ref1')).toBe(true);
-    expect(opts?.onlyEntryIds?.has('ref2')).toBe(true);
+    expect(r).toMatchObject({ code: 0, kind: 'dry-run' });
+    expect(compile).not.toHaveBeenCalled();
   });
 
-  it('respects types filter: only stale entries of selected type are regenerated', async () => {
-    const dir = join(base, 'types-filter');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const future = new Date('2030-01-01T00:00:00.000Z');
-    await utimes(inputPath, future, future);
+  it('calls compiler with onlyEntryIds containing only stale rows', async () => {
+    const staleRead = join(projectDir, 'src', 'stale.ts');
+    const freshRead = join(projectDir, 'src', 'fresh.ts');
+    await writeReadFile(staleRead, new Date('2024-12-01T00:00:00.000Z')); // newer than generatedAt
+    await writeReadFile(freshRead, new Date('2024-01-01T00:00:00.000Z')); // older
+
+    const freshOutput = join(outputDir, 'fresh.md');
+    await mkdir(join(freshOutput, '..'), { recursive: true });
+    await writeFile(freshOutput, 'doc', 'utf8');
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
       entries: [
-        entry({
-          id: 'ref1',
+        {
+          id: 'stale-one',
           type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
-        entry({
+          output: join(outputDir, 'stale.md'),
+          read: [staleRead],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: '2024-06-01T00:00:00.000Z',
+        },
+        {
+          id: 'fresh-one',
+          type: 'references',
+          output: freshOutput,
+          read: [freshRead],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: '2024-06-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    const compile = vi.fn().mockResolvedValue(fakeCompileResult());
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
+    });
+    expect(r).toMatchObject({ code: 0, kind: 'success' });
+    expect(compile).toHaveBeenCalledTimes(1);
+    const ids = [...(compile.mock.calls[0]![0].onlyEntryIds as Set<string>)];
+    expect(ids).toEqual(['stale-one']);
+  });
+
+  it('returns compile-failed when compiler throws', async () => {
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-06-01T00:00:00.000Z'));
+
+    const manifest: ManifestDocument = {
+      version: MANIFEST_VERSION,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
+      entries: [
+        {
+          id: 'r',
+          type: 'references',
+          output: join(outputDir, 'r.md'),
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null,
+        },
+      ],
+    };
+
+    const compile = vi.fn().mockRejectedValue(new Error('compile-go-boom'));
+    const r = await runUpdateCore(makeBaseInput(), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
+    });
+    expect(r).toMatchObject({ code: 1, kind: 'compile-failed', message: 'compile-go-boom' });
+  });
+
+  it('returns entry-not-found when --entry does not match', async () => {
+    const manifest: ManifestDocument = {
+      version: MANIFEST_VERSION,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
+      entries: [
+        {
+          id: 'r',
+          type: 'references',
+          output: join(outputDir, 'r.md'),
+          read: [],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null,
+        },
+      ],
+    };
+
+    const r = await runUpdateCore(makeBaseInput({ entry: 'no-such' }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: vi.fn() as unknown as typeof compileManifestToFeatureTree,
+    });
+    expect(r).toMatchObject({ code: 1, kind: 'entry-not-found' });
+  });
+
+  it('returns entry-excluded-by-types when --entry type not in --types', async () => {
+    const manifest: ManifestDocument = {
+      version: MANIFEST_VERSION,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
+      entries: [
+        {
           id: 'c1',
           type: 'concepts',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
+          output: join(outputDir, 'c.md'),
+          read: [],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: null,
+        },
       ],
     };
-
-    const gen = vi.fn().mockResolvedValue({
-      summary: { attempted: 1, succeeded: 1, failed: 0, skipped: 0, failures: [] },
-      manifest,
+    const compile = vi.fn();
+    const r = await runUpdateCore(makeBaseInput({ entry: 'c1', types: ['references'] }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
     });
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: ['references'],
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 2,
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r.kind).toBe('success');
-    expect(gen).toHaveBeenCalledTimes(1);
-    const only = gen.mock.calls[0]![2]?.onlyEntryIds;
-    expect(only?.size).toBe(1);
-    expect(only?.has('ref1')).toBe(true);
-    expect(only?.has('c1')).toBe(false);
+    expect(r).toMatchObject({ code: 1, kind: 'entry-excluded-by-types' });
+    expect(compile).not.toHaveBeenCalled();
   });
 
-  it('reads manifest from disk when using default deps (integration)', async () => {
-    const dir = join(base, 'disk-read');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    await utimes(inputPath, new Date('2030-01-01'), new Date('2030-01-01'));
+  it('calls compiler for non-stale row when --entry forces it', async () => {
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-01-01T00:00:00.000Z'));
+
+    const outputPath = join(outputDir, 'r.md');
+    await mkdir(join(outputPath, '..'), { recursive: true });
+    await writeFile(outputPath, 'doc', 'utf8');
+    await utimes(
+      outputPath,
+      new Date('2024-06-01T00:00:00.000Z'),
+      new Date('2024-06-01T00:00:00.000Z'),
+    );
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
       entries: [
-        entry({
-          id: 'ref1',
+        {
+          id: 'r',
           type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
+          output: outputPath,
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: '2024-06-01T00:00:00.000Z',
+        },
       ],
     };
-    await writeManifest(dir, manifest);
 
-    const gen = vi.fn().mockResolvedValue({
-      summary: { attempted: 1, succeeded: 1, failed: 0, skipped: 0, failures: [] },
-      manifest,
+    const compile = vi.fn().mockResolvedValue(fakeCompileResult());
+    const r = await runUpdateCore(makeBaseInput({ entry: 'r' }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
     });
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 2,
-      },
-      {
-        readManifestFromDocspec: (await import('../manifest/reader.js')).readManifestFromDocspec,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r.kind).toBe('success');
-    expect(gen).toHaveBeenCalled();
+    expect(r).toMatchObject({ code: 0, kind: 'success' });
+    expect(compile).toHaveBeenCalledTimes(1);
+    const ids = [...(compile.mock.calls[0]![0].onlyEntryIds as Set<string>)];
+    expect(ids).toEqual(['r']);
   });
 
-  it('returns generate-failed when generateEntries reports failures', async () => {
-    const dir = join(base, 'fail-gen');
-    const inputPath = join(dir, 'input.md');
-    await mkdir(dir, { recursive: true });
-    await writeFile(inputPath, 'x', 'utf8');
-    const future = new Date('2030-01-01T00:00:00.000Z');
-    await utimes(inputPath, future, future);
+  it('passes featureId override through to the compiler', async () => {
+    const refReadPath = join(projectDir, 'src', 'cli.ts');
+    await writeReadFile(refReadPath, new Date('2024-12-01T00:00:00.000Z'));
 
     const manifest: ManifestDocument = {
       version: MANIFEST_VERSION,
-      createdAt: '2020-01-01T00:00:00.000Z',
-      docspecDir: dir,
-      outputDir: join(dir, 'docs'),
-      projectDir: dir,
+      createdAt: '2024-06-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir,
       entries: [
-        entry({
-          id: 'ref1',
+        {
+          id: 'r',
           type: 'references',
-          read: [inputPath],
-          generatedAt: '2025-01-01T00:00:00.000Z',
-        }),
+          output: join(outputDir, 'r.md'),
+          read: [refReadPath],
+          productId: null,
+          personaId: null,
+          taskIds: [],
+          conceptId: null,
+          tutorialPosition: null,
+          tutorialThreadLength: null,
+          generatedAt: '2024-06-01T00:00:00.000Z',
+        },
       ],
     };
 
-    const summary = {
-      attempted: 1,
-      succeeded: 0,
-      failed: 1,
-      skipped: 0,
-      failures: [{ id: 'ref1', message: 'sandbox failed' }],
-    };
-
-    const gen = vi.fn().mockResolvedValue({ summary, manifest });
-
-    const r = await runUpdateCore(
-      {
-        docspecDir: dir,
-        outputDir: manifest.outputDir,
-        projectDir: manifest.projectDir,
-        types: 'all',
-        dryRun: false,
-        allowMissingManifest: false,
-        gateRetries: 2,
-      },
-      {
-        readManifestFromDocspec: async () => manifest,
-        generateEntries: gen as unknown as typeof generateEntries,
-      },
-    );
-
-    expect(r).toMatchObject({ code: 1, kind: 'generate-failed', summary });
+    const compile = vi.fn().mockResolvedValue(fakeCompileResult('saifdocs-stable'));
+    await runUpdateCore(makeBaseInput({ featureId: 'saifdocs-stable' }), {
+      readManifestFromDocspec: vi.fn().mockResolvedValue(manifest),
+      compileManifestToFeatureTree: compile as unknown as typeof compileManifestToFeatureTree,
+    });
+    expect(compile.mock.calls[0]![0].featureId).toBe('saifdocs-stable');
   });
 });

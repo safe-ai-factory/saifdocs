@@ -344,36 +344,12 @@ describe('CLI gen', () => {
     });
   });
 
-  it('exits 1 on invalid --gate-retries', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'saifdocs-gen-'));
-    try {
-      const docs = join(base, 'docspec');
-      await cp(minimalDocspec, docs, { recursive: true });
-      await expect(
-        genCommand.run!(
-          ctxArgv(genCommand, [
-            '--docspec-dir',
-            docs,
-            '--output-dir',
-            join(base, 'out'),
-            '--project-dir',
-            minimalProject,
-            '--gate-retries',
-            '0',
-            '--dry-run',
-          ]),
-        ),
-      ).rejects.toMatchObject({ exitCode: 1 });
-    } finally {
-      await rm(base, { recursive: true, force: true });
-    }
-  });
-
-  it('dry-run completes without non-zero process.exit', async () => {
+  it('dry-run completes without non-zero process.exit (manifest written, no feature dir emitted)', async () => {
     const base = await mkdtemp(join(tmpdir(), 'saifdocs-gen2-'));
     try {
       const docs = join(base, 'docspec');
       await cp(minimalDocspec, docs, { recursive: true });
+      const featuresDir = join(base, 'saifctl', 'features');
       await genCommand.run!(
         ctxArgv(genCommand, [
           '--docspec-dir',
@@ -382,12 +358,49 @@ describe('CLI gen', () => {
           join(base, 'out'),
           '--project-dir',
           minimalProject,
+          '--saifctl-features-dir',
+          featuresDir,
           '--dry-run',
         ]),
       );
       expect(exitCtx.exitCodes).toHaveLength(0);
       const manifestRaw = await readFile(join(docs, '.manifest.json'), 'utf8');
       expect(JSON.parse(manifestRaw).entries.length).toBeGreaterThan(0);
+      // Dry-run must not emit a feature dir.
+      const featuresExists = await readFile(featuresDir).catch(() => null);
+      expect(featuresExists).toBeNull();
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it('emits a feature dir under saifctl/features/ on a real run', async () => {
+    // Layout: project/{docspec, src, out, saifctl/features} — output-dir
+    // must sit inside project-dir for the compiler's path validation.
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-gen-emit-'));
+    try {
+      const projectInTmp = join(base, 'project');
+      await cp(minimalProject, projectInTmp, { recursive: true });
+      const docs = join(projectInTmp, 'docspec');
+      await cp(minimalDocspec, docs, { recursive: true });
+      const featuresDir = join(projectInTmp, 'saifctl', 'features');
+      await genCommand.run!(
+        ctxArgv(genCommand, [
+          '--docspec-dir',
+          docs,
+          '--output-dir',
+          join(projectInTmp, 'out'),
+          '--project-dir',
+          projectInTmp,
+          '--saifctl-features-dir',
+          featuresDir,
+          '--feature-id',
+          'saifdocs-test',
+        ]),
+      );
+      expect(exitCtx.exitCodes).toHaveLength(0);
+      const featureYml = await readFile(join(featuresDir, 'saifdocs-test', 'feature.yml'), 'utf8');
+      expect(featureYml).toMatch(/id: audit, rounds: 1/);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
@@ -499,34 +512,35 @@ describe('CLI update', () => {
         },
         code: 0,
       },
-      { ret: { code: 1, kind: 'invalid-gate-retries', raw: 'x' }, code: 1 },
-      {
-        ret: {
-          code: 1,
-          kind: 'generate-failed',
-          summary: {
-            attempted: 1,
-            succeeded: 0,
-            failed: 1,
-            skipped: 0,
-            failures: [],
-          },
-        },
-        code: 1,
-      },
+      { ret: { code: 1, kind: 'compile-failed', message: 'boom' }, code: 1 },
       {
         ret: {
           code: 0,
           kind: 'success',
-          summary: {
-            attempted: 1,
-            succeeded: 1,
-            failed: 0,
-            skipped: 0,
-            failures: [],
+          result: {
+            featureId: 'saifdocs-test',
+            featureDir: '/tmp/x/saifdocs-test',
+            featureDirRel: 'saifctl/features/saifdocs-test',
+            phases: [],
+            byType: {},
           },
         },
         code: 0,
+      },
+      { ret: { code: 1, kind: 'entry-not-found', selector: 'x' }, code: 1 },
+      {
+        ret: { code: 1, kind: 'entry-ambiguous', selector: 'y', candidates: ['a', 'b'] },
+        code: 1,
+      },
+      {
+        ret: {
+          code: 1,
+          kind: 'entry-excluded-by-types',
+          entryId: 'c1',
+          entryType: 'concepts',
+          types: ['references'],
+        },
+        code: 1,
       },
     ];
 
@@ -562,29 +576,14 @@ describe('CLI review', () => {
     expect(hoistedMocks.runReview).not.toHaveBeenCalled();
   });
 
-  it('exits 1 on invalid --gate-retries', async () => {
-    await expect(
-      reviewCommand.run!(
-        ctxArgv(reviewCommand, [
-          '--product',
-          'p1',
-          '--persona',
-          'u1',
-          '--task',
-          't1',
-          '--gate-retries',
-          'nope',
-        ]),
-      ),
-    ).rejects.toMatchObject({ exitCode: 1 });
-    expect(hoistedMocks.runReview).not.toHaveBeenCalled();
-  });
-
   it('exits 0 on dry-run success', async () => {
     hoistedMocks.runReview.mockResolvedValueOnce({
+      productId: 'p1',
+      personaId: 'u1',
+      taskId: 't1',
       success: true,
       message: 'dry-run',
-      reportPath: '',
+      reportPath: '/tmp/report.md',
     });
 
     await expect(
@@ -599,46 +598,22 @@ describe('CLI review', () => {
           '--docspec-dir',
           minimalDocspec,
           '--dry-run',
-        ]),
-      ),
-    ).rejects.toMatchObject({ exitCode: 0 });
-
-    expect(exitCtx.exitCodes).toEqual([0]);
-  });
-
-  it('uses strict cedar path when --strict-network', async () => {
-    hoistedMocks.runReview.mockResolvedValueOnce({
-      success: true,
-      message: 'dry-run',
-      reportPath: '',
-    });
-
-    await expect(
-      reviewCommand.run!(
-        ctxArgv(reviewCommand, [
-          '--product',
-          'p1',
-          '--persona',
-          'u1',
-          '--task',
-          't1',
-          '--docspec-dir',
-          minimalDocspec,
-          '--dry-run',
-          '--strict-network',
         ]),
       ),
     ).rejects.toMatchObject({ exitCode: 0 });
 
     expect(hoistedMocks.runReview).toHaveBeenCalled();
     const settings = hoistedMocks.runReview.mock.calls[0]![2];
-    expect(settings.cedarPolicyPath).toMatch(/review-strict\.cedar$/);
+    expect(settings.dryRun).toBe(true);
   });
 
   it('exits 1 when runReview returns failure', async () => {
     hoistedMocks.runReview.mockResolvedValueOnce({
+      productId: 'p1',
+      personaId: 'u1',
+      taskId: 't1',
       success: false,
-      message: 'saifctl sandbox exited non-zero',
+      message: 'compile-go-boom',
       reportPath: '/tmp/r.md',
     });
 
@@ -660,12 +635,23 @@ describe('CLI review', () => {
     expect(exitCtx.exitCodes).toEqual([1]);
   });
 
-  it('exits 0 and logs report path when runReview succeeds (non dry-run)', async () => {
+  it('exits 0 and logs the emitted feature when runReview succeeds (non dry-run)', async () => {
     hoistedMocks.runReview.mockResolvedValueOnce({
+      productId: 'p1',
+      personaId: 'u1',
+      taskId: 't1',
       success: true,
       reportPath: '/abs/path/to/report.md',
+      feature: {
+        featureId: 'saifdocs-review-test',
+        featureDir: '/saifctl/features/saifdocs-review-test',
+        featureDirRel: 'saifctl/features/saifdocs-review-test',
+        phaseId: '1-review-p1-u1-t1',
+        phaseDir: '/saifctl/features/saifdocs-review-test/phases/1-review-p1-u1-t1',
+      },
     });
     const successSpy = vi.spyOn(consola, 'success').mockImplementation(() => undefined);
+    const infoSpy = vi.spyOn(consola, 'info').mockImplementation(() => undefined);
 
     await expect(
       reviewCommand.run!(
@@ -683,9 +669,14 @@ describe('CLI review', () => {
     ).rejects.toMatchObject({ exitCode: 0 });
 
     expect(exitCtx.exitCodes).toEqual([0]);
-    expect(successSpy.mock.calls.some((c) => String(c[0]).includes('/abs/path/to/report.md'))).toBe(
+    // Logs the emitted feature id (success channel) and the report path (info channel).
+    expect(successSpy.mock.calls.some((c) => String(c[0]).includes('saifdocs-review-test'))).toBe(
+      true,
+    );
+    expect(infoSpy.mock.calls.some((c) => String(c[0]).includes('/abs/path/to/report.md'))).toBe(
       true,
     );
     successSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 });

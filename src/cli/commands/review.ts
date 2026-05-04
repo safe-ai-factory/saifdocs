@@ -1,9 +1,15 @@
+/**
+ * `saifdocs review` — emit a single-phase saifctl feature for a persona
+ * simulation review. The user (or CI) runs `saifctl feat run --feature <id>`
+ * afterwards to actually execute the review.
+ *
+ * Saifdocs no longer spawns saifctl; Cedar policy / agent profile / model
+ * are decided by the consumer repo.
+ */
 import { resolve } from 'node:path';
 
-import { sandboxPassthroughArgs } from '@safe-ai-factory/saifctl';
 import { defineCommand } from 'citty';
 
-import { DEFAULT_GATE_RETRIES, getDefaultReviewStrictCedarPath } from '../../constants.js';
 import { DocspecError } from '../../docspec/errors.js';
 import { readDocspec } from '../../docspec/reader.js';
 import { consola } from '../../logger.js';
@@ -11,38 +17,25 @@ import { runReview } from '../../review/review.js';
 import {
   docspecDirArg,
   dryRunArg,
+  featureIdArg,
   outputDirArg,
   projectDirArg,
-  saifctlConfigArg,
-  saifctlDirArg,
+  saifctlFeaturesDirArg,
 } from '../args.js';
-import { readSandboxPassthroughFromCittyArgs } from '../sandbox.js';
 
 const reviewCommand = defineCommand({
   meta: {
     name: 'review',
     description:
-      'Run a persona simulation review via saifctl sandbox (writes report under output-dir/review/). Use --strict-network for hostname allowlisted outbound access.',
+      'Emit a single-phase saifctl feature for a persona-simulation review. Run `saifctl feat run --feature <id>` afterwards to execute it.',
   },
   args: {
     'docspec-dir': docspecDirArg,
     'output-dir': outputDirArg,
     'project-dir': projectDirArg,
-    'saifctl-config': saifctlConfigArg,
-    'saifctl-dir': saifctlDirArg,
+    'saifctl-features-dir': saifctlFeaturesDirArg,
+    'feature-id': featureIdArg,
     'dry-run': dryRunArg,
-    ...sandboxPassthroughArgs,
-    cedar: {
-      type: 'string' as const,
-      description:
-        'Path to Cedar policy for Leash (default: packaged review.cedar; overrides --strict-network)',
-    },
-    'strict-network': {
-      type: 'boolean' as const,
-      description:
-        'Use packaged review-strict.cedar (allowlist: registries, GitHub, common LLM API hosts)',
-      default: false,
-    },
     product: {
       type: 'string' as const,
       description: 'Product id (docspec/products/<id>/)',
@@ -61,6 +54,16 @@ const reviewCommand = defineCommand({
     const docspecDir = resolve(cwd, args['docspec-dir'] ?? 'docspec');
     const outputDir = resolve(cwd, args['output-dir'] ?? 'docs');
     const projectDir = resolve(cwd, args['project-dir'] ?? '.');
+    const saifctlFeaturesDir = resolve(
+      cwd,
+      typeof args['saifctl-features-dir'] === 'string' && args['saifctl-features-dir'].length > 0
+        ? args['saifctl-features-dir']
+        : resolve(projectDir, 'saifctl', 'features'),
+    );
+    const featureIdOverride =
+      typeof args['feature-id'] === 'string' && args['feature-id'].length > 0
+        ? args['feature-id']
+        : undefined;
 
     const product = typeof args.product === 'string' ? args.product.trim() : '';
     const persona = typeof args.persona === 'string' ? args.persona.trim() : '';
@@ -69,22 +72,6 @@ const reviewCommand = defineCommand({
       consola.error('Error: --product, --persona, and --task are required');
       process.exit(1);
     }
-
-    const gateRetriesRaw =
-      typeof args['gate-retries'] === 'string'
-        ? args['gate-retries'].trim()
-        : String(DEFAULT_GATE_RETRIES);
-    const gateRetriesParsed = parseInt(gateRetriesRaw, 10);
-    if (Number.isNaN(gateRetriesParsed) || gateRetriesParsed < 1) {
-      consola.error(`Invalid --gate-retries: ${gateRetriesRaw} (expected positive integer)`);
-      process.exit(1);
-    }
-
-    const passthrough = readSandboxPassthroughFromCittyArgs(args as Record<string, unknown>);
-    const { cedarPolicyPath: cedarFromCli, ...restPassthrough } = passthrough;
-    const cedarPolicyPath =
-      cedarFromCli ??
-      (args['strict-network'] === true ? getDefaultReviewStrictCedarPath() : undefined);
 
     let parsed;
     try {
@@ -107,13 +94,9 @@ const reviewCommand = defineCommand({
           docspecDir,
           outputDir,
           projectDir,
-          saifctlConfig:
-            typeof args['saifctl-config'] === 'string' ? args['saifctl-config'] : undefined,
-          saifctlDir: typeof args['saifctl-dir'] === 'string' ? args['saifctl-dir'] : 'saifctl',
-          gateRetries: gateRetriesParsed,
+          saifctlFeaturesDir,
+          ...(featureIdOverride ? { featureId: featureIdOverride } : {}),
           dryRun: args['dry-run'] === true,
-          cedarPolicyPath,
-          ...restPassthrough,
         },
       );
     } catch (e) {
@@ -127,9 +110,16 @@ const reviewCommand = defineCommand({
 
     if (result.success) {
       if (result.message === 'dry-run') {
+        consola.info(`[review] Dry run: would emit feature for ${product}/${persona}/${task}`);
         process.exit(0);
       }
-      consola.success(`[review] Report: ${result.reportPath}`);
+      if (result.feature) {
+        consola.success(
+          `[review] Emitted feature: ${result.feature.featureId} at ${result.feature.featureDir}`,
+        );
+        consola.info(`[review] Next step: saifctl feat run --feature ${result.feature.featureId}`);
+      }
+      consola.info(`[review] Report will land at: ${result.reportPath}`);
       process.exit(0);
     }
 
