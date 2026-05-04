@@ -2,10 +2,6 @@
  * Pull arrival_context / search_terms / user_stage from a how-to entry's
  * task frontmatter (first task sets enums; search_terms merged across all
  * referenced tasks).
- *
- * Lifted out of `src/generation/generate.ts` so the compiler can reuse it
- * without depending on the legacy generation pipeline (which is being
- * deleted).
  */
 import { readFile } from 'node:fs/promises';
 

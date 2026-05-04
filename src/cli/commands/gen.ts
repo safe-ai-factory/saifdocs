@@ -1,16 +1,11 @@
 /**
  * `saifdocs gen` — emit a saifctl feature tree from docspec.
  *
- * Saifdocs is a *compiler*, not an orchestrator. This command:
- *   1. Reads docspec → builds manifest
- *   2. Writes the manifest to `<docspec>/.manifest.json` (staleness tracking)
- *   3. Emits a saifctl feature tree under `<saifctl-features-dir>/<feature-id>/`
+ *   1. Read docspec → build manifest
+ *   2. Write the manifest to `<docspec>/.manifest.json` (staleness tracking)
+ *   3. Emit a saifctl feature tree under `<saifctl-features-dir>/<feature-id>/`
  *      with one phase per file-to-generate.
- *   4. Exits. The user (or CI) runs `saifctl feat run --feature <id>` next.
- *
- * Saifdocs no longer spawns `saifctl sandbox` itself; saifctl is at most a
- * dev-dep (for integration tests). Cedar policy, agent profile, model
- * selection — all decided by the consumer repo, not saifdocs.
+ *   4. Exit. The user (or CI) runs `saifctl feat run --feature <id>` next.
  */
 import { resolve } from 'node:path';
 

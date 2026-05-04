@@ -1,10 +1,10 @@
 /**
- * Compile a saifdocs manifest into a saifctl phases-and-critics feature tree.
+ * Turn a saifdocs manifest into a saifctl feature tree.
  *
- * The contract: saifdocs no longer orchestrates LLM runs. Instead, each
- * `saifdocs gen` invocation emits one timestamped feature dir under the
- * consumer's `saifctl/features/` with N phases (one per file-to-generate).
- * The user (or CI) then invokes `saifctl feat run --feature <id>`.
+ * Each `saifdocs gen` invocation emits one timestamped feature dir under
+ * the consumer's `saifctl/features/` with N phases (one per
+ * file-to-generate). The user (or CI) then invokes
+ * `saifctl feat run --feature <id>`.
  *
  * Output shape:
  *
@@ -24,7 +24,7 @@
  * Phase numbering width is computed from the total phase count
  * (`String(N).length`) so 50 pages → `01..50`, 1023 pages → `0001..1023`.
  * Phases are ordered: references → concepts → how-tos → tutorials →
- * landing-pages (matching saifdocs's existing `GEN_PHASES`).
+ * landing-pages.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
@@ -334,8 +334,6 @@ generated docs and writes a markdown report to:
 saifctl feat run --feature ${opts.featureId}
 \`\`\`
 
-Cedar policy, agent profile, model selection, etc. are decided by the
-consumer repo, not by saifdocs.
 `;
 }
 

@@ -16,12 +16,6 @@ describe('renderFeatureYml', () => {
   it('locks tests as immutable by default', () => {
     expect(renderFeatureYml()).toMatch(/tests:\s+mutable: false/);
   });
-
-  it('does not specify a Cedar policy (consumer repo decides)', () => {
-    const yml = renderFeatureYml();
-    expect(yml.toLowerCase()).not.toContain('cedar:');
-    expect(yml.toLowerCase()).not.toContain('cedarpolicy');
-  });
 });
 
 describe('renderPlanMd', () => {

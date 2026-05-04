@@ -3,10 +3,7 @@
  *
  * Flow: read last `docspec/.manifest.json` → mark entries stale when any
  * `read` path is newer than `generatedAt` (same as `validate`) → emit a
- * feature tree containing **only** the stale phases via the compiler.
- *
- * Saifdocs no longer orchestrates anything — it just emits feature dirs.
- * The user runs `saifctl feat run --feature <id>` to actually regenerate.
+ * feature tree containing **only** the stale phases.
  *
  * Optional `--entry` forces one id into the regen set regardless of
  * staleness.

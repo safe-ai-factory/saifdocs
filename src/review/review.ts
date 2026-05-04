@@ -1,11 +1,7 @@
 /**
  * Persona-simulation review — emit a single-phase saifctl feature dir whose
- * deliverable is a markdown review report.
- *
- * Saifdocs no longer spawns `saifctl sandbox`. This function only *prepares*
- * the feature tree; the user (or CI) runs `saifctl feat run --feature <id>`
- * to actually execute the review. Cedar policy, agent profile, etc. are
- * decided by the consumer repo, not by saifdocs.
+ * deliverable is a markdown review report. The user (or CI) runs
+ * `saifctl feat run --feature <id>` afterwards to execute the review.
  */
 import { join, resolve } from 'node:path';
 
@@ -15,7 +11,6 @@ import { type CompiledReviewResult, compileReviewToFeatureTree } from '../featur
 import { outputPathRelativeToProject } from '../generation/output-paths.js';
 import { renderReviewTaskFile } from './review-task-file.js';
 
-/** Minimal settings — no cedar, no gate-retries, no sandbox passthrough. */
 export type ReviewSettings = {
   /** Path to the docspec dir (used to resolve persona/task body content). */
   docspecDir: string;

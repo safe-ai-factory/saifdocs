@@ -7,8 +7,7 @@
  * Does not rebuild the manifest from docspec; run `gen` when the manifest
  * structure or `read` lists need to change.
  *
- * Saifdocs no longer orchestrates the regen run itself — the user runs
- * `saifctl feat run --feature <id>` after this command emits the feature.
+ * Run `saifctl feat run --feature <id>` after this command emits the feature.
  */
 import { resolve } from 'node:path';
 

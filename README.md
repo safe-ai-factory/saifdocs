@@ -1,20 +1,15 @@
 # saifdocs
 
-Saifdocs is a **compiler**. It reads a **docspec** (intent model: products,
-personas, tasks, concepts, reference pointers) and emits a saifctl
-phases-and-critics feature tree. The user (or CI) then runs
-`saifctl feat run --feature <id>` to actually generate the docs.
-
-Saifdocs has **no runtime dependency on saifctl** — it only writes files.
-saifctl is a dev-dep, used in tests. Cedar policy, agent profile, model
-selection, etc. are decided by the consumer repo, not by saifdocs.
+Saifdocs reads a **docspec** (intent model: products, personas, tasks,
+concepts, reference pointers) and emits a saifctl feature tree. Run
+`saifctl feat run --feature <id>` to generate the actual docs.
 
 ## Requirements
 
 - Node.js 20+
 - pnpm 9+
-- saifctl installed in the consumer repo (only at *run* time, when the
-  user invokes `saifctl feat run`; saifdocs itself doesn't need it).
+- saifctl installed (you'll invoke `saifctl feat run` after each
+  `saifdocs gen`).
 
 ## Usage
 
@@ -60,8 +55,7 @@ saifctl feat run --feature saifdocs-<timestamp>
 ```
 
 Saifctl drives generation of every doc page, with the audit critic
-reviewing each page after writing. Cedar policy, agent profile, etc.
-come from the consumer repo's saifctl config or CLI flags.
+reviewing each page after writing.
 
 ### Manifest-only (no feature tree)
 
@@ -141,9 +135,9 @@ node dist/cli.js clear
 
 ### Validate / audit
 
-- `validate` — manifest staleness check (no LLM, no saifctl).
-- `audit` — gap report: expected outputs vs files on disk (no LLM, no
-  saifctl). Run *after* `saifctl feat run` to confirm coverage.
+- `validate` — manifest staleness check (no LLM, fast).
+- `audit` — gap report: expected outputs vs files on disk (no LLM,
+  fast). Run *after* `saifctl feat run` to confirm coverage.
 
 ## Layout
 

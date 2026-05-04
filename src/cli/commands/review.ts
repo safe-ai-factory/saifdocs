@@ -1,10 +1,7 @@
 /**
  * `saifdocs review` — emit a single-phase saifctl feature for a persona
  * simulation review. The user (or CI) runs `saifctl feat run --feature <id>`
- * afterwards to actually execute the review.
- *
- * Saifdocs no longer spawns saifctl; Cedar policy / agent profile / model
- * are decided by the consumer repo.
+ * afterwards to execute the review.
  */
 import { resolve } from 'node:path';
 
