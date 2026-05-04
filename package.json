@@ -1,6 +1,6 @@
 {
   "name": "@safe-ai-factory/saifdocs",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "AI-driven documentation generator with persona-aware quality control.",
   "private": false,
   "publishConfig": {
@@ -33,7 +33,7 @@
   ],
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.0.0"
   },
   "exports": {
     ".": {
@@ -60,7 +60,7 @@
     "test": "vitest run src/",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "prepublishOnly": "npm run build"
+    "package:build": "bash scripts/package.sh"
   },
   "dependencies": {
     "citty": "^0.2.1",

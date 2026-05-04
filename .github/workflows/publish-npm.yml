@@ -39,7 +39,10 @@ jobs:
       - name: Check
         run: pnpm run check
 
-      - name: Publish to npm
-        run: npm publish --access public
+      - name: Build and pack
+        run: bash scripts/package.sh
+
+      - name: Publish verified tarball to npm
+        run: npm publish dist-pack/safe-ai-factory-saifdocs-*.tgz --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

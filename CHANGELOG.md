@@ -6,6 +6,8 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-05-04
+
 ### Changed (BREAKING)
 
 - **`saifdocs gen` now emits a saifctl feature tree** (one timestamped
