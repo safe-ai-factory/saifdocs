@@ -8,4 +8,4 @@
 
 - Do not explicitly mention the analogies as a list of items. Instead, use them as a way to explain the concept or process.
 
-- When referring to saifdocs, saifctl or saifbox (or other products), always format it as `saifdocs` (lowercase, no bold, no italics, monospace font).
+- When referring to saifdocs, saifctl, or other products, always format it as `saifdocs` (lowercase, no bold, no italics, monospace font).

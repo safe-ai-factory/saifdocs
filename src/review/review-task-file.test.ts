@@ -8,26 +8,26 @@ describe('renderReviewTaskFile', () => {
     const md = renderReviewTaskFile({
       projectDir: '/proj',
       outputDir: '/proj/docs',
-      productId: 'saifbox',
-      personaId: 'openclaw_user',
-      taskId: 'protect-pc',
-      personaBody: 'I am a cautious OpenClaw user.',
+      productId: 'example-product',
+      personaId: 'example-user',
+      taskId: 'example-task',
+      personaBody: 'I am a cautious user.',
       taskFrontmatter: {
         prereq_concepts: [],
-        search_terms: ['run openclaw safely'],
+        search_terms: ['run example safely'],
         arrival_context: 'search',
         user_stage: 'evaluating',
       },
-      taskBody: 'Keep my machine safe.',
-      reportWorkspaceRel: 'docs/review/saifbox/openclaw_user/protect-pc-2026.md',
+      taskBody: 'Keep my data safe.',
+      reportWorkspaceRel: 'docs/review/example-product/example-user/example-task-2026.md',
     });
 
-    expect(md).toContain('I am a cautious OpenClaw user.');
-    expect(md).toContain('Keep my machine safe.');
-    expect(md).toContain('docs/review/saifbox/openclaw_user/protect-pc-2026.md');
+    expect(md).toContain('I am a cautious user.');
+    expect(md).toContain('Keep my data safe.');
+    expect(md).toContain('docs/review/example-product/example-user/example-task-2026.md');
     expect(md).toContain('## Verdict');
     expect(md).toContain('PASS | PARTIAL | FAIL');
-    expect(md).toContain('run openclaw safely');
+    expect(md).toContain('run example safely');
   });
 
   it('uses unspecified and (none specified) when frontmatter fields are incomplete', () => {
