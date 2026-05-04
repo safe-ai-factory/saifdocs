@@ -1,5 +1,10 @@
 # saifdocs
 
+[![npm version](https://img.shields.io/npm/v/%40safe-ai-factory%2Fsaifdocs)](https://www.npmjs.com/package/@safe-ai-factory/saifdocs)
+[![npm downloads](https://img.shields.io/npm/dm/%40safe-ai-factory%2Fsaifdocs)](https://www.npmjs.com/package/@safe-ai-factory/saifdocs)
+[![license](https://img.shields.io/npm/l/%40safe-ai-factory%2Fsaifdocs)](https://github.com/safe-ai-factory/saifdocs/blob/main/LICENSE)
+[![Tests](https://github.com/safe-ai-factory/saifdocs/actions/workflows/tests.yml/badge.svg)](https://github.com/safe-ai-factory/saifdocs/actions/workflows/tests.yml)
+
 Project documentation generator. You sketch **what** to document in a
 small `docspec/` tree — products, audiences, tasks, concepts, source
 files — and saifdocs (via [saifctl](https://github.com/safe-ai-factory/saifctl))
