@@ -1,4 +1,10 @@
-# Requires repository secret NPM_TOKEN (npm automation token with publish access for @safe-ai-factory).
+# Publishes via npm Trusted Publishing (OIDC) — no NPM_TOKEN required.
+#
+# Bootstrap (one-time, manual): publish v0.1.0 from a local CLI
+# (`npm publish dist-pack/safe-ai-factory-saifdocs-0.1.0.tgz --access public`),
+# then go to npmjs.com → @safe-ai-factory/saifdocs → Settings → Trusted
+# Publishers and add this repo + this workflow file. After that, CI handles
+# every subsequent tag push automatically via OIDC.
 
 name: Publish npm
 
@@ -13,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # Required for npm Trusted Publishing (OIDC) + --provenance attestations.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +50,5 @@ jobs:
       - name: Build and pack
         run: bash scripts/package.sh
 
-      - name: Publish verified tarball to npm
-        run: npm publish dist-pack/safe-ai-factory-saifdocs-*.tgz --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish verified tarball to npm (OIDC + provenance)
+        run: npm publish dist-pack/safe-ai-factory-saifdocs-*.tgz --access public --provenance
