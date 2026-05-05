@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -70,7 +70,7 @@ function installExitMock() {
   return { spy, exitCodes };
 }
 
-describe('CLI clear', () => {
+describe('CLI clear (manifest-aware)', () => {
   let exitCtx: ReturnType<typeof installExitMock>;
 
   beforeEach(() => {
@@ -81,29 +81,190 @@ describe('CLI clear', () => {
     exitCtx.spy.mockRestore();
   });
 
-  it('removes output directory', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-'));
-    const out = join(base, 'docs');
-    await mkdir(join(out, 'nested'), { recursive: true });
-    await writeFile(join(out, 'nested', 'a.md'), 'x', 'utf8');
+  /** Write a manifest with the given output paths (one entry per path) under `docspecDir`. */
+  async function writeManifest(
+    docspecDir: string,
+    outputDir: string,
+    outputs: string[],
+  ): Promise<void> {
+    const manifest: ManifestDocument = {
+      version: MANIFEST_VERSION,
+      createdAt: '2020-01-01T00:00:00.000Z',
+      docspecDir,
+      outputDir,
+      projectDir: docspecDir,
+      entries: outputs.map((output, i) => ({
+        id: `e${i}`,
+        type: 'concepts' as const,
+        output,
+        read: [],
+        productId: null,
+        personaId: null,
+        taskIds: [],
+        conceptId: null,
+        tutorialPosition: null,
+        tutorialThreadLength: null,
+        generatedAt: '2025-01-01T00:00:00.000Z',
+      })),
+    };
+    await writeFile(
+      join(docspecDir, '.manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      'utf8',
+    );
+  }
 
-    await clearCommand.run!(ctxArgv(clearCommand, ['--output-dir', out]));
+  it('is a no-op when no manifest exists (handwritten files survive)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-no-manifest-'));
+    try {
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(join(outputDir, 'nested'), { recursive: true });
+      await writeFile(join(outputDir, 'nested', 'a.md'), 'x', 'utf8');
 
-    await expect(readFile(join(out, 'nested', 'a.md'), 'utf8')).rejects.toThrow();
-    expect(exitCtx.exitCodes).toHaveLength(0);
+      await clearCommand.run!(
+        ctxArgv(clearCommand, ['--docspec-dir', docspecDir, '--output-dir', outputDir]),
+      );
+
+      // Handwritten file untouched.
+      await expect(readFile(join(outputDir, 'nested', 'a.md'), 'utf8')).resolves.toBe('x');
+      expect(exitCtx.exitCodes).toHaveLength(0);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
   });
 
-  it('clears default docs/ when --output-dir is omitted (cwd-relative)', async () => {
-    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-default-'));
+  it('deletes only manifest-tracked files; handwritten co-located files survive', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-coexist-'));
+    try {
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      const generated = join(outputDir, 'concepts', 'gen.md');
+      const handwritten = join(outputDir, 'contributing', 'how-to-contribute.md');
+      const handwrittenSibling = join(outputDir, 'index.md');
+
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(dirname(generated), { recursive: true });
+      await mkdir(dirname(handwritten), { recursive: true });
+      await writeFile(generated, 'generated', 'utf8');
+      await writeFile(handwritten, 'handwritten', 'utf8');
+      await writeFile(handwrittenSibling, 'index', 'utf8');
+
+      await writeManifest(docspecDir, outputDir, [generated]);
+
+      await clearCommand.run!(
+        ctxArgv(clearCommand, ['--docspec-dir', docspecDir, '--output-dir', outputDir]),
+      );
+
+      // Generated file gone; handwritten survive.
+      await expect(readFile(generated, 'utf8')).rejects.toThrow();
+      await expect(readFile(handwritten, 'utf8')).resolves.toBe('handwritten');
+      await expect(readFile(handwrittenSibling, 'utf8')).resolves.toBe('index');
+      expect(exitCtx.exitCodes).toHaveLength(0);
+    } finally {
+      // (left for OS tmp cleanup)
+    }
+  });
+
+  it('tolerates stale manifest entries (file already absent)', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-stale-'));
+    try {
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      const present = join(outputDir, 'concepts', 'present.md');
+      const stale = join(outputDir, 'concepts', 'stale.md');
+
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(dirname(present), { recursive: true });
+      await writeFile(present, 'p', 'utf8');
+      // `stale` is in the manifest but never created on disk.
+
+      await writeManifest(docspecDir, outputDir, [present, stale]);
+
+      await clearCommand.run!(
+        ctxArgv(clearCommand, ['--docspec-dir', docspecDir, '--output-dir', outputDir]),
+      );
+
+      await expect(readFile(present, 'utf8')).rejects.toThrow();
+      expect(exitCtx.exitCodes).toHaveLength(0);
+    } finally {
+      // (left for OS tmp cleanup)
+    }
+  });
+
+  it('ignores manifest entries pointing outside --output-dir', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-outside-'));
+    try {
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      const inside = join(outputDir, 'concepts', 'in.md');
+      const outside = join(base, 'other', 'out.md');
+
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(dirname(inside), { recursive: true });
+      await mkdir(dirname(outside), { recursive: true });
+      await writeFile(inside, 'in', 'utf8');
+      await writeFile(outside, 'out', 'utf8');
+
+      await writeManifest(docspecDir, outputDir, [inside, outside]);
+
+      await clearCommand.run!(
+        ctxArgv(clearCommand, ['--docspec-dir', docspecDir, '--output-dir', outputDir]),
+      );
+
+      await expect(readFile(inside, 'utf8')).rejects.toThrow();
+      // `outside` is outside --output-dir, must be untouched.
+      await expect(readFile(outside, 'utf8')).resolves.toBe('out');
+      expect(exitCtx.exitCodes).toHaveLength(0);
+    } finally {
+      // (left for OS tmp cleanup)
+    }
+  });
+
+  it('prunes empty parent directories up to (but not including) --output-dir', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-prune-'));
+    try {
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      const deep = join(outputDir, 'a', 'b', 'c', 'page.md');
+
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(dirname(deep), { recursive: true });
+      await writeFile(deep, 'p', 'utf8');
+
+      await writeManifest(docspecDir, outputDir, [deep]);
+
+      await clearCommand.run!(
+        ctxArgv(clearCommand, ['--docspec-dir', docspecDir, '--output-dir', outputDir]),
+      );
+
+      // The chain a/b/c is empty after deletion → all pruned. outputDir itself stays.
+      await expect(readFile(deep, 'utf8')).rejects.toThrow();
+      await expect(readdir(join(outputDir, 'a'))).rejects.toMatchObject({ code: 'ENOENT' });
+      // outputDir survives:
+      await expect(readdir(outputDir)).resolves.toEqual([]);
+    } finally {
+      // (left for OS tmp cleanup)
+    }
+  });
+
+  it('respects cwd-relative --docspec-dir / --output-dir defaults', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'saifdocs-clear-cwd-'));
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(base);
     try {
-      const docs = join(base, 'docs');
-      await mkdir(join(docs, 'nested'), { recursive: true });
-      await writeFile(join(docs, 'nested', 'a.md'), 'x', 'utf8');
+      const docspecDir = join(base, 'docspec');
+      const outputDir = join(base, 'docs');
+      const page = join(outputDir, 'p.md');
+      await mkdir(docspecDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(page, 'p', 'utf8');
+
+      await writeManifest(docspecDir, outputDir, [page]);
 
       await clearCommand.run!(ctxArgv(clearCommand, []));
 
-      await expect(readFile(join(docs, 'nested', 'a.md'), 'utf8')).rejects.toThrow();
+      await expect(readFile(page, 'utf8')).rejects.toThrow();
       expect(exitCtx.exitCodes).toHaveLength(0);
     } finally {
       cwdSpy.mockRestore();

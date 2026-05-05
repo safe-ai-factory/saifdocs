@@ -6,6 +6,20 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-05
+
+### Changed (BREAKING)
+
+- **`saifdocs clear` is now manifest-aware.** Previously it ran
+  `rm -rf $outputDir` indiscriminately. Now it reads `<docspec>/.manifest.json`
+  and deletes only the files declared in `entries[].output` that fall under
+  `--output-dir`. Empty parent directories are pruned up to (but not
+  including) `--output-dir`. Behaviour: missing manifest → no-op; manifest
+  entries pointing outside `--output-dir` → ignored; stale entries (file
+  already absent) → tolerated. This lets handwritten files (e.g.
+  `docs/contributing/`) co-exist alongside generated content without being
+  wiped on `clear`. New `--docspec-dir` flag (defaults to `docspec/`).
+
 ## [0.1.0] — 2026-05-04
 
 ### Changed (BREAKING)
