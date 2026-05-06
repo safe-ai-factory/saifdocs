@@ -9,5 +9,6 @@ Secondary workflows: `saifdocs update` emits a feature tree containing only stal
 saifdocs keeps control in the hands of the developer/technical writer, while handing off the repetitive work to the AI.
 
 Tutorials and how-to's are described separately. They serve different purposes:
+
 - Tutorial - almost like onboarding, introduces the product and its features
 - How-to - a guide to a specific task or problem

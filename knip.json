@@ -1,20 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": [
-    "src/**/__fixtures__/**"
-  ],
-  "ignoreDependencies": [
-    "@safe-ai-factory/saifctl"
-  ],
+  "ignore": ["src/**/__fixtures__/**"],
+  "ignoreDependencies": ["@safe-ai-factory/saifctl"],
   "ignoreIssues": {
-    "src/generation/generate.ts": [
-      "exports"
-    ],
-    "src/generation/run-sandbox.ts": [
-      "exports"
-    ],
-    "src/manifest/builder.ts": [
-      "exports"
-    ]
+    "src/generation/generate.ts": ["exports"],
+    "src/generation/run-sandbox.ts": ["exports"],
+    "src/manifest/builder.ts": ["exports"]
   }
 }

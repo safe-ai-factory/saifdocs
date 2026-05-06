@@ -147,8 +147,7 @@ describe('renderOutputSpec', () => {
     // Reconstruct the regex from the captured source and exercise the cases.
     // The captured group is the regex literal as it appears in the emitted JS;
     // we just eval the relevant runtime behavior here.
-    const strip = (s: string) =>
-      s.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
+    const strip = (s: string) => s.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
     expect(strip('---\nfoo: bar\n---\n# Title\nbody').trim()).toBe('# Title\nbody');
     expect(strip('# No frontmatter\nbody').trim()).toBe('# No frontmatter\nbody');
     expect(strip('---\nfoo: bar\n---').trim()).toBe('');

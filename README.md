@@ -132,14 +132,14 @@ docs/
 
 ## Daily workflows
 
-| Command | What it does |
-| --- | --- |
-| `saifdocs gen` | Full compile from scratch — fresh feature dir, every page. |
-| `saifdocs update` | Emit a feature dir containing only stale phases (per `validate`'s rules: any `read` path newer than `generatedAt`). |
-| `saifdocs validate` | Check staleness in CI — no LLM, fast. Exits non-zero if any page is out of date. |
-| `saifdocs audit` | Gap report: expected outputs (per docspec) vs files on disk. Run after `saifctl feat run` to confirm coverage. |
-| `saifdocs review` | Emit a single-phase feature for a persona-simulation review. |
-| `saifdocs clear` | Delete the output directory (default `docs/`). |
+| Command             | What it does                                                                                                        |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `saifdocs gen`      | Full compile from scratch — fresh feature dir, every page.                                                          |
+| `saifdocs update`   | Emit a feature dir containing only stale phases (per `validate`'s rules: any `read` path newer than `generatedAt`). |
+| `saifdocs validate` | Check staleness in CI — no LLM, fast. Exits non-zero if any page is out of date.                                    |
+| `saifdocs audit`    | Gap report: expected outputs (per docspec) vs files on disk. Run after `saifctl feat run` to confirm coverage.      |
+| `saifdocs review`   | Emit a single-phase feature for a persona-simulation review.                                                        |
+| `saifdocs clear`    | Delete the output directory (default `docs/`).                                                                      |
 
 The typical loop:
 

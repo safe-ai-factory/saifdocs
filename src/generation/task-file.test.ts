@@ -129,11 +129,11 @@ describe('renderHowToTaskFile', () => {
 
     const raw = renderHowToTaskFile(entry, projectDir, {
       arrival_context: 'search',
-      search_terms: ['run openclaw safely'],
+      search_terms: ['run example safely'],
       user_stage: 'evaluating',
     });
 
-    expect(raw).toContain('run openclaw safely');
+    expect(raw).toContain('run example safely');
     expect(raw).toContain('search');
     expect(raw).toContain('user_stage: evaluating');
     expect(raw).toContain('pre-commitment');
@@ -150,7 +150,7 @@ describe('renderTutorialTaskFile', () => {
       output: resolve('/repo/proj/docs/products/p1/tutorials/intro.md'),
       read: [resolve('/repo/proj/docspec/products/p1/concepts/c1.md')],
       productId: 'p1',
-      personaId: 'openclaw_user',
+      personaId: 'example_user',
       taskIds: [],
       conceptId: null,
       tutorialPosition: 2,
@@ -164,11 +164,11 @@ describe('renderTutorialTaskFile', () => {
     expect(parsed.data.type).toBe('tutorials');
     expect(parsed.data.tutorial_position).toBe(2);
     expect(parsed.data.tutorial_thread_length).toBe(5);
-    expect(parsed.data.persona_id).toBe('openclaw_user');
+    expect(parsed.data.persona_id).toBe('example_user');
     expect(parsed.data.product_id).toBe('p1');
     expect(parsed.content).toContain('**tutorial stage**');
     expect(parsed.content).toContain('**Stage**: 2 of 5');
-    expect(parsed.content).toContain('`openclaw_user`');
+    expect(parsed.content).toContain('`example_user`');
     expect(parsed.content).toContain('docs/products/p1/tutorials/intro.md');
   });
 });
