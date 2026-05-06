@@ -70,7 +70,7 @@ function installExitMock() {
   return { spy, exitCodes };
 }
 
-describe('CLI clear (manifest-aware)', () => {
+describe('CLI clear (only deletes manifest-tracked files)', () => {
   let exitCtx: ReturnType<typeof installExitMock>;
 
   beforeEach(() => {

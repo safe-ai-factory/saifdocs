@@ -54,7 +54,7 @@ output exactly.
 
 ### Changed (BREAKING)
 
-- **`saifdocs clear` is now manifest-aware.** Previously it ran
+- **`saifdocs clear` now only deletes files listed in the manifest.** Previously it ran
   `rm -rf $outputDir` indiscriminately. Now it reads `<docspec>/.manifest.json`
   and deletes only the files declared in `entries[].output` that fall under
   `--output-dir`. Empty parent directories are pruned up to (but not

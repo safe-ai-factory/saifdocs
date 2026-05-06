@@ -12,7 +12,7 @@ const clearCommand = defineCommand({
   meta: {
     name: 'clear',
     description:
-      'Delete saifdocs-generated files in the output directory (manifest-aware: only files the manifest claims to own)',
+      'Delete saifdocs-generated files in the output directory (only files the manifest claims to own)',
   },
   args: {
     'docspec-dir': docspecDirArg,
