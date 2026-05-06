@@ -6,6 +6,21 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-05-06
+
+### Fixed
+
+- **`output.spec.ts` body-content check always failed** — POSIX awk
+  semantics gotcha: the program had `/[^[:space:]]/ { print; exit 0 }`
+  followed by `END { exit 1 }`. Per POSIX, `exit 0` from a regular rule
+  routes through END, and END's `exit 1` overrides — so the spec
+  reported "no body content" even when the matching rule had clearly
+  printed a non-empty line. Replaced the awk-and-exit-status approach
+  with `cat` over the sidecar plus a JS regex that strips a leading
+  YAML frontmatter (`/^---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n?/`) and
+  asserts the remaining body is non-empty. Sidesteps awk dialect
+  variation (mawk vs gawk vs bwk) and is easier to read.
+
 ## [0.3.0] — 2026-05-06
 
 ### Changed (BREAKING)

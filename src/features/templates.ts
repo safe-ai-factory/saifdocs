@@ -202,17 +202,14 @@ async function exec(cmd: string, args: string[] = []): Promise<SidecarResult> {
   return res.json() as Promise<SidecarResult>;
 }
 
-// Loose YAML-frontmatter-stripping awk: prints the first non-frontmatter,
-// non-blank line and exits 0. If we reach END without printing (file is
-// empty, whitespace-only, or frontmatter-only), exits 1.
-const FRONTMATTER_BODY_AWK = [
-  'BEGIN { in_fm = 0 }',
-  'NR == 1 && /^---$/ { in_fm = 1; next }',
-  'in_fm && /^---$/ { in_fm = 0; next }',
-  'in_fm { next }',
-  '/[^[:space:]]/ { print; exit 0 }',
-  'END { exit 1 }',
-].join('\\n');
+// Loose YAML-frontmatter detector. The earlier awk-based check tripped a
+// POSIX awk gotcha: \`exit 0\` from a rule routes through END, and an
+// END that calls \`exit 1\` overrides — so the spec failed even when a
+// body line WAS printed. Read the file via \`cat\` and parse in JS;
+// no awk dialects, no exit-status overrides, easier to read.
+function stripLeadingFrontmatter(content: string): string {
+  return content.replace(/^---\\r?\\n[\\s\\S]*?\\r?\\n---\\r?\\n?/, '');
+}
 
 describe(\`saifdocs output: ${safePath}\`, () => {
   it('file exists', async () => {
@@ -226,8 +223,13 @@ describe(\`saifdocs output: ${safePath}\`, () => {
   });
 
   it('file has body content beyond frontmatter', async () => {
-    const r = await exec('awk', [FRONTMATTER_BODY_AWK, OUTPUT]);
-    expect(r.exitCode, \`output has no body content at \${OUTPUT}\`).toBe(0);
+    const r = await exec('cat', [OUTPUT]);
+    expect(r.exitCode, \`cat \${OUTPUT} failed: \${r.stderr}\`).toBe(0);
+    const body = stripLeadingFrontmatter(r.stdout).trim();
+    expect(
+      body.length,
+      \`output has no body content at \${OUTPUT} (after stripping any YAML frontmatter)\`,
+    ).toBeGreaterThan(0);
   });
 });
 `;

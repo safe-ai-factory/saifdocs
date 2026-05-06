@@ -1,6 +1,6 @@
 {
   "name": "@safe-ai-factory/saifdocs",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI-driven documentation generator with persona-aware quality control.",
   "private": false,
   "publishConfig": {
