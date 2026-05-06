@@ -181,13 +181,11 @@ describe('compileManifestToFeatureTree', () => {
     await expect(stat(join(result.featureDir, 'plan.md'))).resolves.toBeDefined();
     await expect(stat(join(result.featureDir, 'critics', 'audit.md'))).resolves.toBeDefined();
 
-    // Phase dir + spec.md + tests/gate.sh
+    // Phase dir + spec.md + tests/public/output.spec.ts
     const phaseDir = result.phases[0]!.phaseDir;
     await expect(stat(join(phaseDir, 'spec.md'))).resolves.toBeDefined();
-    const gate = await stat(join(phaseDir, 'tests', 'gate.sh'));
-    expect(gate.isFile()).toBe(true);
-    // Gate script should be executable.
-    expect(gate.mode & 0o111).toBeTruthy();
+    const spec = await stat(join(phaseDir, 'tests', 'public', 'output.spec.ts'));
+    expect(spec.isFile()).toBe(true);
   });
 
   it('uses a timestamped feature id by default', async () => {
@@ -328,7 +326,7 @@ describe('compileManifestToFeatureTree', () => {
     expect(phaseIds[1]).toBe('2-ref-foo-bar-2');
   });
 
-  it('feature.yml declares the audit critic; gate.sh references the doc output path', async () => {
+  it('feature.yml declares the audit critic; output.spec.ts references the doc output path', async () => {
     const manifest = makeManifest([
       entryWithOutput('ref-1', 'references', 'docs/references/cli.md'),
     ]);
@@ -342,7 +340,11 @@ describe('compileManifestToFeatureTree', () => {
     const featureYml = await readFile(join(result.featureDir, 'feature.yml'), 'utf8');
     expect(featureYml).toMatch(/id: audit, rounds: 1/);
 
-    const gate = await readFile(join(result.phases[0]!.phaseDir, 'tests', 'gate.sh'), 'utf8');
-    expect(gate).toContain(`OUTPUT_PATH='docs/references/cli.md'`);
+    const spec = await readFile(
+      join(result.phases[0]!.phaseDir, 'tests', 'public', 'output.spec.ts'),
+      'utf8',
+    );
+    expect(spec).toContain(`const OUTPUT = '/workspace/docs/references/cli.md';`);
+    expect(spec).toContain(`import { describe, expect, it } from 'vitest';`);
   });
 });

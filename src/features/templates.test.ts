@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   renderAuditCriticMd,
   renderFeatureYml,
-  renderGateScript,
+  renderOutputSpec,
   renderPlanMd,
 } from './templates.js';
 
@@ -89,28 +89,48 @@ describe('renderAuditCriticMd', () => {
   });
 });
 
-describe('renderGateScript', () => {
-  it('starts with the bash shebang and strict mode', () => {
-    const script = renderGateScript('docs/references/cli.md');
-    expect(script.split('\n')[0]).toBe('#!/usr/bin/env bash');
-    expect(script).toContain('set -euo pipefail');
+describe('renderOutputSpec', () => {
+  it('renders a vitest spec (imports describe/it/expect)', () => {
+    const spec = renderOutputSpec('docs/references/cli.md');
+    expect(spec).toContain(`import { describe, expect, it } from 'vitest';`);
   });
 
-  it('embeds the output path in single quotes', () => {
-    const script = renderGateScript('docs/references/cli.md');
-    expect(script).toContain(`OUTPUT_PATH='docs/references/cli.md'`);
+  it('embeds the output path under /workspace as the OUTPUT constant', () => {
+    const spec = renderOutputSpec('docs/references/cli.md');
+    expect(spec).toContain(`const OUTPUT = '/workspace/docs/references/cli.md';`);
   });
 
   it('escapes single quotes in the output path', () => {
-    const script = renderGateScript("docs/foo's-page.md");
-    // The script should contain the safe-quoted form, not the raw apostrophe.
-    expect(script).toContain(`OUTPUT_PATH='docs/foo'\\''s-page.md'`);
+    const spec = renderOutputSpec("docs/foo's-page.md");
+    // The TS string literal must use \\' to neutralize the apostrophe.
+    expect(spec).toContain(`/workspace/docs/foo\\'s-page.md`);
+    // Round-trip: the emitted line must be syntactically valid (no unterminated string).
+    expect(spec).toMatch(/const OUTPUT = '\/workspace\/docs\/foo\\'s-page\.md';/);
   });
 
-  it('checks for file existence, non-emptiness, and body content', () => {
-    const script = renderGateScript('docs/x.md');
-    expect(script).toContain('expected output not found');
-    expect(script).toContain('output file is empty');
-    expect(script).toContain('output has no body content');
+  it('escapes backslashes in the output path', () => {
+    // Implausible on Unix but we should not produce an escape-sequence trap.
+    const spec = renderOutputSpec('docs\\weird.md');
+    expect(spec).toContain('/workspace/docs\\\\weird.md');
+  });
+
+  it('reaches the staging container via the saifctl HTTP sidecar', () => {
+    const spec = renderOutputSpec('docs/x.md');
+    expect(spec).toContain('SAIFCTL_SIDECAR_URL');
+    expect(spec).toContain(`/exec`);
+  });
+
+  it('asserts file existence, non-emptiness, and body content beyond frontmatter', () => {
+    const spec = renderOutputSpec('docs/x.md');
+    expect(spec).toContain('expected output not found');
+    expect(spec).toContain('output file is empty');
+    expect(spec).toContain('output has no body content');
+  });
+
+  it('uses test, test, and awk via the sidecar (matches gate.sh semantics)', () => {
+    const spec = renderOutputSpec('docs/x.md');
+    expect(spec).toMatch(/exec\('test', \['-f', OUTPUT\]\)/);
+    expect(spec).toMatch(/exec\('test', \['-s', OUTPUT\]\)/);
+    expect(spec).toMatch(/exec\('awk', \[FRONTMATTER_BODY_AWK, OUTPUT\]\)/);
   });
 });

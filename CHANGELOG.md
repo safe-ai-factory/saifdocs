@@ -6,6 +6,35 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-06
+
+### Changed (BREAKING)
+
+- **Per-phase post-condition is now a vitest spec, not a bash gate.**
+  Previously, each phase emitted `phases/<id>/tests/gate.sh` (a bash
+  script asserting the doc page was written). Saifctl's per-phase test
+  contract is a **test-profile-shaped spec file** (vitest by default,
+  matched by `**/*.{test,spec}.?(c|m)[jt]s?(x)`); a bash script was
+  never picked up, which caused `saifctl feat run` to abort every
+  phase with `No test files found, exiting with code 1`.
+
+  Saifdocs now emits `phases/<id>/tests/public/output.spec.ts` — a
+  self-contained vitest spec that reaches the staging container via
+  saifctl's HTTP sidecar (`SAIFCTL_SIDECAR_URL`) and verifies file
+  existence, non-emptiness, and body content beyond any YAML
+  frontmatter (same three checks the gate script performed). The
+  template export `renderGateScript` is replaced by `renderOutputSpec`;
+  both `compileManifestToFeatureTree` and `compileReviewToFeatureTree`
+  now write to `tests/public/output.spec.ts`.
+
+### Migration
+
+Already-emitted feature dirs from saifdocs ≤0.2 still contain
+`tests/gate.sh`; re-emit with `saifdocs gen --feature-id <id>` to
+regenerate them in place, or convert by hand — the new spec is at
+`phases/<id>/tests/public/output.spec.ts` and follows the renderer
+output exactly.
+
 ## [0.2.0] — 2026-05-05
 
 ### Changed (BREAKING)

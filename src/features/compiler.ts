@@ -17,7 +17,8 @@
  *       0001-references-cli-flags/
  *         spec.md
  *         tests/
- *           gate.sh
+ *           public/
+ *             output.spec.ts
  *       0002-references-config/
  *       ...
  *
@@ -44,7 +45,7 @@ import { loadHowToTaskHints } from './howto-hints.js';
 import {
   renderAuditCriticMd,
   renderFeatureYml,
-  renderGateScript,
+  renderOutputSpec,
   renderPlanMd,
 } from './templates.js';
 import { assertValidFeatureId, generateTimestampFeatureId } from './timestamp.js';
@@ -274,17 +275,14 @@ export async function compileManifestToFeatureTree(
   const compiledPhases: CompiledPhase[] = [];
   for (const { phaseId, selection } of phasePlan) {
     const phaseDir = join(featureDir, 'phases', phaseId);
-    const testsDir = join(phaseDir, 'tests');
-    await mkdir(testsDir, { recursive: true });
+    const testsPublicDir = join(phaseDir, 'tests', 'public');
+    await mkdir(testsPublicDir, { recursive: true });
 
     const specMd = await renderPhaseSpecMd(selection.type, selection.entry, projectDir);
     await writeFile(join(phaseDir, 'spec.md'), specMd, 'utf8');
 
     const workspaceRel = outputPathRelativeToProject(projectDir, selection.entry.output);
-    await writeFile(join(testsDir, 'gate.sh'), renderGateScript(workspaceRel), {
-      encoding: 'utf8',
-      mode: 0o755,
-    });
+    await writeFile(join(testsPublicDir, 'output.spec.ts'), renderOutputSpec(workspaceRel), 'utf8');
 
     compiledPhases.push({ phaseId, phaseDir, entry: selection.entry });
   }
@@ -376,7 +374,8 @@ export type CompiledReviewResult = {
  *       1-review-<product>-<persona>-<task>/
  *         spec.md      (the review prompt)
  *         tests/
- *           gate.sh    (checks the report file appeared)
+ *           public/
+ *             output.spec.ts  (vitest spec gating "report file written")
  */
 export async function compileReviewToFeatureTree(
   opts: CompileReviewToFeatureTreeOpts,
@@ -405,7 +404,7 @@ export async function compileReviewToFeatureTree(
 
   await mkdir(featureDir, { recursive: true });
   await mkdir(join(featureDir, 'phases'), { recursive: true });
-  await mkdir(join(phaseDir, 'tests'), { recursive: true });
+  await mkdir(join(phaseDir, 'tests', 'public'), { recursive: true });
 
   await writeFile(join(featureDir, 'feature.yml'), renderReviewFeatureYml(), 'utf8');
   await writeFile(
@@ -424,12 +423,9 @@ export async function compileReviewToFeatureTree(
 
   await writeFile(join(phaseDir, 'spec.md'), opts.reviewSpecMd, 'utf8');
   await writeFile(
-    join(phaseDir, 'tests', 'gate.sh'),
-    renderGateScript(opts.reportWorkspaceRelPath),
-    {
-      encoding: 'utf8',
-      mode: 0o755,
-    },
+    join(phaseDir, 'tests', 'public', 'output.spec.ts'),
+    renderOutputSpec(opts.reportWorkspaceRelPath),
+    'utf8',
   );
 
   return { featureId, featureDir, featureDirRel, phaseId, phaseDir };

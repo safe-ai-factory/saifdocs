@@ -106,12 +106,15 @@ describe('runReview', () => {
     const featureYml = await readFile(join(r.feature!.featureDir, 'feature.yml'), 'utf8');
     expect(featureYml).toMatch(/critics:\s*\[\]/);
 
-    // The phase has spec.md (the review prompt) and tests/gate.sh.
+    // The phase has spec.md (the review prompt) and tests/public/output.spec.ts.
     const specMd = await readFile(join(r.feature!.phaseDir, 'spec.md'), 'utf8');
     expect(specMd.length).toBeGreaterThan(0);
-    const gate = await readFile(join(r.feature!.phaseDir, 'tests', 'gate.sh'), 'utf8');
-    expect(gate).toContain('OUTPUT_PATH=');
-    expect(gate).toMatch(/review\//);
+    const outputSpec = await readFile(
+      join(r.feature!.phaseDir, 'tests', 'public', 'output.spec.ts'),
+      'utf8',
+    );
+    expect(outputSpec).toContain(`const OUTPUT = '/workspace/`);
+    expect(outputSpec).toMatch(/review\//);
   });
 
   it('rejects unknown product/persona/task with a DocspecError', async () => {
