@@ -6,6 +6,38 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-05-08
+
+### Fixed
+
+- **`generatedAt` was never written to non-null values** — the manifest
+  builder always emitted `null`, and no codepath updated it after a
+  successful regeneration. As a result `saifdocs validate` (and
+  `update`'s staleness check, which shares the logic) reported every
+  entry as stale "(never generated)" even immediately after a clean
+  `gen` + `saifctl feat run`. The CI swap from `gen --dry-run` to
+  `validate` was unimplementable while this gap existed.
+
+  New helper `populateGeneratedAtFromOutputs` (in
+  `src/manifest/freshness.ts`) stats each entry's `output` path and
+  writes its mtime as an ISO 8601 timestamp (or `null` if the file is
+  missing). Wired in:
+  - `gen` — runs the helper after `buildManifest`, before persisting,
+    so the manifest written to `<docspec>/.manifest.json` reflects
+    actual disk state.
+  - `update` — refreshes in-memory before staleness checks so
+    "regenerate stale entries" sees current state without requiring a
+    prior `gen` run.
+  - `clear` — refreshes and persists the manifest after deletion;
+    cleared outputs become `null` automatically.
+  - `audit` — refreshes and persists the manifest as part of its
+    docspec ↔ outputDir reconciliation pass.
+
+  After this change, the first `saifdocs gen` (or `gen --dry-run`)
+  against an existing project populates `generatedAt` for every entry
+  whose output already exists on disk. No manual manifest edits
+  required.
+
 ## [0.3.1] — 2026-05-06
 
 ### Fixed

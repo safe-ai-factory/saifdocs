@@ -5,7 +5,9 @@ import { defineCommand } from 'citty';
 
 import { DEFAULT_DOCSPEC_DIR, DEFAULT_OUTPUT_DIR } from '../../constants.js';
 import { consola } from '../../logger.js';
+import { populateGeneratedAtFromOutputs } from '../../manifest/freshness.js';
 import { readManifestFromDocspec } from '../../manifest/reader.js';
+import { writeManifestToDocspec } from '../../manifest/writer.js';
 import { docspecDirArg, outputDirArg } from '../args.js';
 
 const clearCommand = defineCommand({
@@ -57,6 +59,11 @@ const clearCommand = defineCommand({
     }
 
     const prunedDirs = await pruneEmptyDirs(dirsToCheck, outputDir);
+
+    // Reflect the deletion in the manifest: cleared outputs no longer exist,
+    // so `generatedAt` for those entries becomes null on the next stat.
+    const refreshed = await populateGeneratedAtFromOutputs(manifest);
+    await writeManifestToDocspec(docspecDir, refreshed);
 
     const parts = [`Removed ${removed} file(s)`];
     if (missing > 0) parts.push(`${missing} already absent`);
