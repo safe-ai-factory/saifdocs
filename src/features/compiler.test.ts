@@ -2,8 +2,8 @@
  * Tests for `compileManifestToFeatureTree` (`compiler.ts`).
  *
  * The compiler is a pure file-emitter: given an in-memory manifest and a
- * temp output dir, it should produce a complete saifctl phases-and-critics
- * feature tree. We assert:
+ * temp output dir, it should produce a complete saifctl feature tree. We
+ * assert:
  *  - directory shape (feature.yml, plan.md, critics/audit.md, phases/...)
  *  - phase ordering follows GEN_PHASES (refs → concepts → how-tos → ...)
  *  - phase-number width matches the total phase count (zero-padded)
