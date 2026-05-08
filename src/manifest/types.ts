@@ -14,7 +14,27 @@ export type ManifestEntry = {
   tutorialPosition: number | null;
   /** Number of tutorials in this tutorial thread. */
   tutorialThreadLength: number | null;
+  /**
+   * ISO timestamp of when `outputHash` and `inputHashes` were last computed.
+   * Informational — staleness is decided by hash comparison, not timestamp.
+   * `null` means hashes haven't been populated (manifest just built; output
+   * doesn't exist yet).
+   */
   generatedAt: string | null;
+  /**
+   * SHA-256 hash of the output file's contents at the time hashes were
+   * populated (typically right after `saifctl feat run` regenerated it).
+   * `null` if the output file doesn't exist on disk.
+   */
+  outputHash: string | null;
+  /**
+   * SHA-256 hashes of each `read` path's contents at the time hashes were
+   * populated, parallel to `read[]` (same length, same order). Missing
+   * `read` files contribute `null` (validate skips those, matching the
+   * previous mtime-based "missing reads ignored" behaviour).
+   * `null` (the whole field) means hashes haven't been populated.
+   */
+  inputHashes: (string | null)[] | null;
 };
 
 export type ManifestDocument = {

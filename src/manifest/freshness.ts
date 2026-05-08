@@ -1,11 +1,16 @@
-import { stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
 import type { ManifestDocument, ManifestEntry } from './types.js';
 
-async function statMtimeIso(path: string): Promise<string | null> {
+/**
+ * SHA-256 hex digest of the file's bytes, or `null` if the file does not exist.
+ * Re-throws other I/O errors so they surface to the caller.
+ */
+async function hashFile(path: string): Promise<string | null> {
   try {
-    const s = await stat(path);
-    return new Date(s.mtimeMs).toISOString();
+    const bytes = await readFile(path);
+    return createHash('sha256').update(bytes).digest('hex');
   } catch (e) {
     if (
       e &&
@@ -20,23 +25,35 @@ async function statMtimeIso(path: string): Promise<string | null> {
 }
 
 /**
- * Returns a copy of `manifest` where each entry's `generatedAt` is set to the
- * mtime of its `output` file (ISO 8601), or `null` if the file does not exist.
+ * Returns a copy of `manifest` where each entry's `outputHash` and
+ * `inputHashes` reflect the SHA-256 of the corresponding files on disk.
+ * `generatedAt` is set to the current ISO time as informational metadata.
  *
- * The manifest builder always emits `generatedAt: null`; the field is meant to
- * be filled in from disk state after the docs have actually been written.
- * Callers (`gen`, `update`, `clear`, `audit`) run this helper to reconcile the
- * manifest with what's on disk — the `validate` command then has a meaningful
- * timestamp to compare input mtimes against.
+ * Hashes are content-based (not mtime-based) so staleness detection survives
+ * fresh CI checkouts, file copies, tar extracts, and any other transport that
+ * resets filesystem mtimes. Missing files contribute `null` (the validate
+ * command treats missing `read` files as "ignored", matching the original
+ * mtime-based behaviour; missing `output` files mark the entry as stale).
  */
-export async function populateGeneratedAtFromOutputs(
+export async function populateHashesFromFiles(
   manifest: ManifestDocument,
 ): Promise<ManifestDocument> {
+  const now = new Date().toISOString();
   const entries: ManifestEntry[] = await Promise.all(
-    manifest.entries.map(async (entry) => ({
-      ...entry,
-      generatedAt: await statMtimeIso(entry.output),
-    })),
+    manifest.entries.map(async (entry) => {
+      const [outputHash, inputHashes] = await Promise.all([
+        hashFile(entry.output),
+        Promise.all(entry.read.map((p) => hashFile(p))),
+      ]);
+      return {
+        ...entry,
+        // Only stamp generatedAt when there's actually a generated output to
+        // anchor it to; otherwise null preserves "never generated" semantics.
+        generatedAt: outputHash !== null ? now : null,
+        outputHash,
+        inputHashes,
+      };
+    }),
   );
   return { ...manifest, entries };
 }

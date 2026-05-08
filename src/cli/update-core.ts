@@ -13,7 +13,7 @@ import {
   type CompileToFeatureTreeResult,
 } from '../features/compiler.js';
 import { posixPath } from '../generation/output-paths.js';
-import { populateGeneratedAtFromOutputs } from '../manifest/freshness.js';
+import { populateHashesFromFiles } from '../manifest/freshness.js';
 import { readManifestFromDocspec } from '../manifest/reader.js';
 import type { ManifestDocument, ManifestEntry, OutputType } from '../manifest/types.js';
 import { type StaleEntry, validateManifest, type ValidateResult } from '../validate/validate.js';
@@ -155,9 +155,9 @@ export async function runUpdateCore(
     return { code: 2, kind: 'missing-manifest-error' };
   }
 
-  // Refresh `generatedAt` from disk so staleness checks reflect current state
-  // (in-memory only — `gen` is the command that persists the manifest).
-  manifest = await populateGeneratedAtFromOutputs(manifest);
+  // Refresh content hashes from disk so staleness checks reflect current
+  // state (in-memory only — `gen` is the command that persists the manifest).
+  manifest = await populateHashesFromFiles(manifest);
 
   const entrySelector = input.entry?.trim();
 

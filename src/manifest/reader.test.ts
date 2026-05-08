@@ -43,6 +43,8 @@ describe('readManifestFromDocspec', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2025-01-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -98,6 +100,8 @@ describe('readManifestFromDocspec', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };

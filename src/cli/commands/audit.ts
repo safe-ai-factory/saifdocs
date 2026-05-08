@@ -8,7 +8,7 @@ import { renderAuditReport } from '../../audit/audit-report.js';
 import { DocspecError } from '../../docspec/errors.js';
 import { readDocspec } from '../../docspec/reader.js';
 import { consola } from '../../logger.js';
-import { populateGeneratedAtFromOutputs } from '../../manifest/freshness.js';
+import { populateHashesFromFiles } from '../../manifest/freshness.js';
 import { readManifestFromDocspec } from '../../manifest/reader.js';
 import { writeManifestToDocspec } from '../../manifest/writer.js';
 import { docspecDirArg, outputDirArg } from '../args.js';
@@ -48,12 +48,12 @@ const auditCommand = defineCommand({
     const result = await runAudit(parsed, outputDir);
     const report = renderAuditReport(result, new Date().toISOString());
 
-    // Refresh the manifest's `generatedAt` from disk if a manifest exists —
+    // Refresh the manifest's content hashes from disk if a manifest exists —
     // audit is a natural moment to reconcile (it's already walking outputDir).
     // Skips silently when there's no manifest yet (fresh project).
     const manifest = await readManifestFromDocspec(docspecDir);
     if (manifest !== null) {
-      const refreshed = await populateGeneratedAtFromOutputs(manifest);
+      const refreshed = await populateHashesFromFiles(manifest);
       await writeManifestToDocspec(docspecDir, refreshed);
     }
 

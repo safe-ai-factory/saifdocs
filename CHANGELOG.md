@@ -6,6 +6,36 @@ All notable changes to saifdocs are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-09
+
+### Changed (BREAKING)
+
+- **Content-hash staleness instead of mtimes.** Each manifest entry now
+  carries `outputHash` (SHA-256 of the output file) and `inputHashes`
+  (SHA-256 of each `read` path, parallel to `read[]`); both are `null`
+  until populated by `gen` / `update` / `clear` / `audit`. The
+  `generatedAt` field is retained as informational metadata (the time
+  hashes were last computed) but no longer drives staleness decisions.
+
+  Why: mtime-based staleness was unreliable across any transport that
+  resets filesystem mtimes — fresh git checkouts (every file gets the
+  clone time), `cp`/`rsync` without `-t`, `tar` without `-p`, etc. In CI
+  on a fresh clone, validate became a coin flip. SHA-256 over file
+  bytes is filesystem-independent and correctly fires only when content
+  actually changed.
+
+  Existing manifests written by 0.3.x lack the new fields and fail the
+  reader's schema validation; run `saifdocs gen --dry-run` to rewrite
+  the manifest with hashes populated for every output that exists.
+
+  Validate's stale-reason vocabulary is updated: `(never generated)`,
+  `(output file missing)`, `(output file modified externally)`,
+  `(read list changed since last gen)`, plus per-path entries for any
+  `read` whose hash differs from the recorded one.
+
+  The helper `populateGeneratedAtFromOutputs` (introduced in 0.3.2) is
+  renamed to `populateHashesFromFiles` to reflect its new responsibility.
+
 ## [0.3.2] — 2026-05-08
 
 ### Fixed

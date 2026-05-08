@@ -53,6 +53,8 @@ function makeEntry(
     tutorialPosition: null,
     tutorialThreadLength: null,
     generatedAt: null,
+    outputHash: null,
+    inputHashes: null,
     ...overrides,
   };
 }

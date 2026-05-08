@@ -31,6 +31,8 @@ describe('renderReferenceTaskFile', () => {
       tutorialPosition: null,
       tutorialThreadLength: null,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderReferenceTaskFile(entry, projectDir);
@@ -68,6 +70,8 @@ describe('renderConceptTaskFile', () => {
       tutorialPosition: null,
       tutorialThreadLength: null,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderConceptTaskFile(entry, projectDir);
@@ -101,6 +105,8 @@ describe('renderHowToTaskFile', () => {
       tutorialPosition: null,
       tutorialThreadLength: null,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderHowToTaskFile(entry, projectDir);
@@ -125,6 +131,8 @@ describe('renderHowToTaskFile', () => {
       tutorialPosition: null,
       tutorialThreadLength: null,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderHowToTaskFile(entry, projectDir, {
@@ -156,6 +164,8 @@ describe('renderTutorialTaskFile', () => {
       tutorialPosition: 2,
       tutorialThreadLength: 5,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderTutorialTaskFile(entry, projectDir);
@@ -189,6 +199,8 @@ describe('renderLandingPageTaskFile', () => {
       tutorialPosition: null,
       tutorialThreadLength: null,
       generatedAt: null,
+      outputHash: null,
+      inputHashes: null,
     };
 
     const raw = renderLandingPageTaskFile(entry, projectDir);

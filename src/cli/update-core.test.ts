@@ -32,6 +32,8 @@ describe('resolveUpdateEntrySelector', () => {
         tutorialPosition: null,
         tutorialThreadLength: null,
         generatedAt: null,
+        outputHash: null,
+        inputHashes: null,
       },
       {
         id: 'concept--auth',
@@ -45,6 +47,8 @@ describe('resolveUpdateEntrySelector', () => {
         tutorialPosition: null,
         tutorialThreadLength: null,
         generatedAt: null,
+        outputHash: null,
+        inputHashes: null,
       },
     ],
   };
@@ -88,6 +92,8 @@ describe('resolveUpdateEntrySelector', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -204,6 +210,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2024-06-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -240,6 +248,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null, // never generated
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -279,6 +289,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -321,6 +333,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2024-06-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
         {
           id: 'fresh-one',
@@ -334,6 +348,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2024-06-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -372,6 +388,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -404,6 +422,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -435,6 +455,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -479,6 +501,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2024-06-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };
@@ -517,6 +541,8 @@ describe('runUpdateCore', () => {
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: '2024-06-01T00:00:00.000Z',
+          outputHash: null,
+          inputHashes: null,
         },
       ],
     };

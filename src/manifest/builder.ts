@@ -113,6 +113,8 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         tutorialPosition: null,
         tutorialThreadLength: null,
         generatedAt: null,
+        outputHash: null,
+        inputHashes: null,
       });
     }
   };
@@ -155,6 +157,8 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         });
       }
     }
@@ -233,6 +237,8 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           tutorialPosition: null,
           tutorialThreadLength: null,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         });
       }
     }
@@ -364,6 +370,8 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
           tutorialPosition: posMeta.position,
           tutorialThreadLength: posMeta.length,
           generatedAt: null,
+          outputHash: null,
+          inputHashes: null,
         });
       }
     }
@@ -397,6 +405,8 @@ export function buildManifest(parsed: ParsedDocspec, settings: GenSettings): Man
         tutorialPosition: null,
         tutorialThreadLength: null,
         generatedAt: null,
+        outputHash: null,
+        inputHashes: null,
       });
     }
   };

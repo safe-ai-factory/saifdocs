@@ -16,7 +16,7 @@ import { readDocspec } from '../../docspec/reader.js';
 import { compileManifestToFeatureTree } from '../../features/compiler.js';
 import { consola } from '../../logger.js';
 import { buildManifest } from '../../manifest/builder.js';
-import { populateGeneratedAtFromOutputs } from '../../manifest/freshness.js';
+import { populateHashesFromFiles } from '../../manifest/freshness.js';
 import type { GenSettings } from '../../manifest/types.js';
 import { serializeManifest, writeManifestToDocspec } from '../../manifest/writer.js';
 import {
@@ -99,10 +99,10 @@ const genCommand = defineCommand({
       throw e;
     }
 
-    // Reconcile generatedAt with disk: every output file that exists gets its
-    // current mtime; missing outputs stay null. The manifest builder can't do
-    // this because it's a pure transform of docspec → entries.
-    manifest = await populateGeneratedAtFromOutputs(manifest);
+    // Reconcile hashes with disk: SHA-256 every existing output and every
+    // existing read path; missing files become null. The manifest builder
+    // can't do this because it's a pure transform of docspec → entries.
+    manifest = await populateHashesFromFiles(manifest);
 
     const written = await writeManifestToDocspec(docspecDir, manifest);
     consola.success(`Wrote manifest: ${written}`);

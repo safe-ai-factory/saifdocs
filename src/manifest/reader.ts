@@ -26,6 +26,8 @@ const ManifestEntrySchema: z.ZodType<ManifestEntry> = z.object({
   tutorialPosition: z.number().int().positive().nullable(),
   tutorialThreadLength: z.number().int().positive().nullable(),
   generatedAt: z.string().nullable(),
+  outputHash: z.string().nullable(),
+  inputHashes: z.array(z.string().nullable()).nullable(),
 });
 
 export const ManifestDocumentSchema: z.ZodType<ManifestDocument> = z.object({

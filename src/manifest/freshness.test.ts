@@ -1,11 +1,12 @@
-import { mkdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { MANIFEST_VERSION } from '../constants.js';
-import { populateGeneratedAtFromOutputs } from './freshness.js';
+import { populateHashesFromFiles } from './freshness.js';
 import type { ManifestDocument, ManifestEntry } from './types.js';
 
 function entry(overrides: Partial<ManifestEntry> & { id: string; output: string }): ManifestEntry {
@@ -19,6 +20,8 @@ function entry(overrides: Partial<ManifestEntry> & { id: string; output: string 
     tutorialPosition: null,
     tutorialThreadLength: null,
     generatedAt: null,
+    outputHash: null,
+    inputHashes: null,
     ...overrides,
   };
 }
@@ -34,26 +37,31 @@ function manifest(entries: ManifestEntry[]): ManifestDocument {
   };
 }
 
-describe('populateGeneratedAtFromOutputs', () => {
-  it('sets generatedAt to the output mtime when the output file exists', async () => {
+function sha256(content: string): string {
+  return createHash('sha256').update(Buffer.from(content)).digest('hex');
+}
+
+describe('populateHashesFromFiles', () => {
+  it('hashes the output file and stamps generatedAt when output exists', async () => {
     const base = join(tmpdir(), `saifdocs-freshness-${process.pid}-${Date.now()}`);
     try {
       await mkdir(base, { recursive: true });
       const outPath = join(base, 'page.md');
-      await writeFile(outPath, '# page\n', 'utf8');
-      const fixedMtime = new Date('2026-04-01T12:00:00.000Z');
-      await utimes(outPath, fixedMtime, fixedMtime);
+      const body = '# page body\n';
+      await writeFile(outPath, body, 'utf8');
 
       const m = manifest([entry({ id: 'a', output: outPath })]);
-      const result = await populateGeneratedAtFromOutputs(m);
+      const result = await populateHashesFromFiles(m);
 
-      expect(result.entries[0]!.generatedAt).toBe(fixedMtime.toISOString());
+      expect(result.entries[0]!.outputHash).toBe(sha256(body));
+      expect(result.entries[0]!.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(result.entries[0]!.inputHashes).toEqual([]);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
   });
 
-  it('sets generatedAt to null when the output file is missing', async () => {
+  it('leaves outputHash null and generatedAt null when the output is missing', async () => {
     const base = join(tmpdir(), `saifdocs-freshness-missing-${process.pid}-${Date.now()}`);
     try {
       await mkdir(base, { recursive: true });
@@ -62,32 +70,58 @@ describe('populateGeneratedAtFromOutputs', () => {
           id: 'a',
           output: join(base, 'never-existed.md'),
           generatedAt: '2025-01-01T00:00:00.000Z',
+          outputHash: 'stale-hash',
         }),
       ]);
 
-      const result = await populateGeneratedAtFromOutputs(m);
+      const result = await populateHashesFromFiles(m);
 
+      expect(result.entries[0]!.outputHash).toBeNull();
       expect(result.entries[0]!.generatedAt).toBeNull();
     } finally {
       await rm(base, { recursive: true, force: true });
     }
   });
 
-  it('refreshes a stale generatedAt when the output is newer than the recorded value', async () => {
-    const base = join(tmpdir(), `saifdocs-freshness-refresh-${process.pid}-${Date.now()}`);
+  it('hashes each `read` path into a parallel inputHashes array', async () => {
+    const base = join(tmpdir(), `saifdocs-freshness-reads-${process.pid}-${Date.now()}`);
     try {
       await mkdir(base, { recursive: true });
       const outPath = join(base, 'page.md');
-      await writeFile(outPath, '# page\n', 'utf8');
-      const newMtime = new Date('2026-05-08T10:00:00.000Z');
-      await utimes(outPath, newMtime, newMtime);
+      const inA = join(base, 'in-a.md');
+      const inB = join(base, 'in-b.md');
+      await writeFile(outPath, 'out', 'utf8');
+      await writeFile(inA, 'aaa', 'utf8');
+      await writeFile(inB, 'bbb', 'utf8');
+
+      const m = manifest([entry({ id: 'a', output: outPath, read: [inA, inB] })]);
+      const result = await populateHashesFromFiles(m);
+
+      expect(result.entries[0]!.inputHashes).toEqual([sha256('aaa'), sha256('bbb')]);
+    } finally {
+      await rm(base, { recursive: true, force: true });
+    }
+  });
+
+  it('represents a missing read file as a null slot in inputHashes', async () => {
+    const base = join(tmpdir(), `saifdocs-freshness-mixed-${process.pid}-${Date.now()}`);
+    try {
+      await mkdir(base, { recursive: true });
+      const outPath = join(base, 'page.md');
+      const present = join(base, 'present.md');
+      await writeFile(outPath, 'out', 'utf8');
+      await writeFile(present, 'present-body', 'utf8');
 
       const m = manifest([
-        entry({ id: 'a', output: outPath, generatedAt: '2025-01-01T00:00:00.000Z' }),
+        entry({
+          id: 'a',
+          output: outPath,
+          read: [present, join(base, 'missing.md')],
+        }),
       ]);
-      const result = await populateGeneratedAtFromOutputs(m);
+      const result = await populateHashesFromFiles(m);
 
-      expect(result.entries[0]!.generatedAt).toBe(newMtime.toISOString());
+      expect(result.entries[0]!.inputHashes).toEqual([sha256('present-body'), null]);
     } finally {
       await rm(base, { recursive: true, force: true });
     }
@@ -103,7 +137,7 @@ describe('populateGeneratedAtFromOutputs', () => {
       const original = manifest([entry({ id: 'a', output: outPath })]);
       const before = JSON.stringify(original);
 
-      await populateGeneratedAtFromOutputs(original);
+      await populateHashesFromFiles(original);
 
       expect(JSON.stringify(original)).toBe(before);
     } finally {
@@ -113,33 +147,11 @@ describe('populateGeneratedAtFromOutputs', () => {
 
   it('preserves manifest-level fields (createdAt, version, dirs)', async () => {
     const m = manifest([]);
-    const result = await populateGeneratedAtFromOutputs(m);
+    const result = await populateHashesFromFiles(m);
     expect(result.version).toBe(m.version);
     expect(result.createdAt).toBe(m.createdAt);
     expect(result.docspecDir).toBe(m.docspecDir);
     expect(result.outputDir).toBe(m.outputDir);
     expect(result.projectDir).toBe(m.projectDir);
-  });
-
-  it('handles a mix of present and missing outputs', async () => {
-    const base = join(tmpdir(), `saifdocs-freshness-mixed-${process.pid}-${Date.now()}`);
-    try {
-      await mkdir(base, { recursive: true });
-      const present = join(base, 'present.md');
-      await writeFile(present, 'x', 'utf8');
-      const fixedMtime = new Date('2026-03-15T08:00:00.000Z');
-      await utimes(present, fixedMtime, fixedMtime);
-
-      const m = manifest([
-        entry({ id: 'present', output: present }),
-        entry({ id: 'missing', output: join(base, 'missing.md') }),
-      ]);
-      const result = await populateGeneratedAtFromOutputs(m);
-
-      expect(result.entries[0]!.generatedAt).toBe(fixedMtime.toISOString());
-      expect(result.entries[1]!.generatedAt).toBeNull();
-    } finally {
-      await rm(base, { recursive: true, force: true });
-    }
   });
 });

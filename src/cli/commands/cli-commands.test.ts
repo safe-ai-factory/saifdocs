@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -105,6 +106,8 @@ describe('CLI clear (only deletes manifest-tracked files)', () => {
         tutorialPosition: null,
         tutorialThreadLength: null,
         generatedAt: '2025-01-01T00:00:00.000Z',
+        outputHash: null,
+        inputHashes: null,
       })),
     };
     await writeFile(
@@ -348,6 +351,8 @@ describe('CLI validate', () => {
             tutorialPosition: null,
             tutorialThreadLength: null,
             generatedAt: '2025-01-01T00:00:00.000Z',
+            outputHash: createHash('sha256').update('ok').digest('hex'),
+            inputHashes: [],
           },
           {
             id: 'e2',
@@ -361,6 +366,8 @@ describe('CLI validate', () => {
             tutorialPosition: null,
             tutorialThreadLength: null,
             generatedAt: null,
+            outputHash: null,
+            inputHashes: null,
           },
         ],
       };
@@ -412,6 +419,8 @@ describe('CLI validate', () => {
             tutorialPosition: null,
             tutorialThreadLength: null,
             generatedAt: '2000-01-01T00:00:00.000Z',
+            outputHash: null,
+            inputHashes: null,
           },
         ],
       };
@@ -463,6 +472,8 @@ describe('CLI validate', () => {
             tutorialPosition: null,
             tutorialThreadLength: null,
             generatedAt: '2000-01-01T00:00:00.000Z',
+            outputHash: null,
+            inputHashes: null,
           },
         ],
       };
